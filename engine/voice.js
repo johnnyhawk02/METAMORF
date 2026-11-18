@@ -6,8 +6,8 @@
 // CURVE). Every parameter glides (a one-pole of about 5 ms on its normalised value) so a knob turned while the note
 // rings never clicks; a new note snaps straight to its own settings. Both phases start at zero on every note and
 // nothing is random, so a sound renders the same every time.
-import { PARAMS, MAPS, levelGain } from '../sound/params.js?v=mwm5a0zk';
-import { tables, read } from './tables.js?v=mwm5a0zk';
+import { PARAMS, MAPS, levelGain } from '../sound/params.js?v=mwm5nxnv';
+import { tables, read } from './tables.js?v=mwm5nxnv';
 
 const IDS = PARAMS.map((p) => p.id), N = IDS.length;
 const IX = Object.fromEntries(IDS.map((id, i) => [id, i]));

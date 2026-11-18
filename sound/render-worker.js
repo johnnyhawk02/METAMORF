@@ -1,6 +1,6 @@
 // The offline renderer in a Worker, off the page's thread: a message { id, params, out, vel, seconds, fs } comes back
 // as { id, L, R, peak, length } (the buffers transferred, not copied).
-import { renderSound } from '../engine/offline.js?v=mwm5a0zk';
+import { renderSound } from '../engine/offline.js?v=mwm5nxnv';
 
 self.onmessage = (e) => {
   const { id, params, out, vel, seconds, fs } = e.data;
