@@ -3,7 +3,8 @@
 // Build step 1 has the ones that need no kept sounds: FREE (every parameter anywhere in its safe range), the starter
 // recipes (a sound of a named type, hand-tuned ranges for the stub voice) and ALTER (a nudge around a sound's home).
 // LIBRARY, BREED, MORPH, STYLE and the learned recipes come with the library (build steps 10 and 11).
-import { PARAMS, BY_ID, isBip } from './params.js?v=mwm61gqf';
+import { PARAMS, BY_ID, isBip } from './params.js?v=mwm79h1i';
+import { BUILTIN_IDS } from '../engine/tables.js?v=mwm79h1i';
 
 const pick = (rnd, [lo, hi]) => lo + rnd() * (hi - lo);
 const lim = (p) => [isBip(p) ? -1 : 0, 1];
@@ -39,6 +40,34 @@ export function recipe(rnd, type) {
   const r = STARTERS[type] || {}, o = {};
   for (const p of PARAMS) o[p.id] = round(pick(rnd, r[p.id] || (p.id === 'a_level' ? [0.75, 0.95] : p.id === 'a_fine' ? [-0.1, 0.1] : p.safe)));
   return o;
+}
+
+// the tables a new sound's oscillators use. FREE: any built-in for each. A recipe: BASIC most of the time (its
+// positions above are written for BASIC), else one of the type's own; a table other than BASIC gets a POSITION
+// anywhere in it. Each entry: the type's choices for [OSC A, OSC B], with how often BASIC is kept
+const B = (n) => 'builtin:' + n;
+const TABLE_PICKS = {
+  kick: [[B('harmonics'), B('odd'), B('bend')], [], 0.75],
+  tom: [[B('harmonics'), B('odd'), B('formant')], [B('harmonics'), B('odd')], 0.6],
+  perc: [[B('harmonics'), B('odd'), B('formant'), B('bend'), B('fold')], [B('sparse'), B('formant'), B('sync')], 0.4],
+  zap: [[B('sync'), B('bend'), B('fold'), B('pulse')], [B('sync'), B('pulse'), B('steps')], 0.35],
+  snare: [[B('harmonics'), B('bend')], [B('grit'), B('fold'), B('steps')], 0.45],
+  clap: [[B('grit'), B('fold')], [B('grit'), B('steps')], 0.45],
+  rim: [[B('odd'), B('bend'), B('formant')], [B('sparse'), B('grit')], 0.45],
+  bell: [[B('harmonics'), B('sparse')], [B('sparse'), B('harmonics'), B('formant')], 0.4],
+  'closed hat': [[B('grit'), B('sparse'), B('steps')], [B('grit'), B('sparse'), B('sync')], 0.35],
+  'open hat': [[B('grit'), B('sparse'), B('steps')], [B('grit'), B('sparse'), B('sync')], 0.35],
+  cymbal: [[B('grit'), B('sparse')], [B('grit'), B('sparse'), B('sync')], 0.35],
+};
+/** the tables for a new sound of a type ('' for FREE); p (its parameters) gets a fresh POSITION for a table that
+ * isn't BASIC. -> { a, b } */
+export function pickTables(rnd, type, p) {
+  const one = (list, keepBasic) => (!list.length || rnd() < keepBasic ? B('basic') : list[Math.floor(rnd() * list.length)]);
+  const r = TABLE_PICKS[type];
+  const t = r ? { a: one(r[0], r[2]), b: one(r[1], r[2]) } : { a: BUILTIN_IDS[Math.floor(rnd() * BUILTIN_IDS.length)], b: BUILTIN_IDS[Math.floor(rnd() * BUILTIN_IDS.length)] };
+  if (r && t.a !== B('basic')) p.a_pos = round(rnd());
+  if (r && t.b !== B('basic')) p.b_pos = round(rnd());
+  return t;
 }
 
 /** ALTER: each parameter moved around the home by depth (0..1) of its range: its safe range, or the whole range when

@@ -1,6 +1,7 @@
 // The audio thread: the instrument (engine/instrument.js) in an AudioWorklet. The page sends it notes and settings
-// as messages; it sends back the engines' peaks and the distortion's sidechain envelope for the meters.
-import { Instrument } from '../engine/instrument.js?v=mwm61gqf';
+// as messages (and the wavetables the sounds name, built beside the page); it sends back the engines' peaks and the distortion's sidechain envelope for the meters.
+import { Instrument } from '../engine/instrument.js?v=mwm79h1i';
+import { hold, drop } from '../engine/tables.js?v=mwm79h1i';
 
 class Metamorf extends AudioWorkletProcessor {
   constructor() {
@@ -17,6 +18,8 @@ class Metamorf extends AudioWorkletProcessor {
     else if (m.type === 'update') I.update(m.e, m.params, m.out);
     else if (m.type === 'fx') I.setFx(m.fx);
     else if (m.type === 'engines') I.setEngines(m.n);
+    else if (m.type === 'table') { hold(m.table); this.port.postMessage({ type: 'held', id: m.table.id }); }
+    else if (m.type === 'drop') drop(m.id);
     else if (m.type === 'egain') m.gains.forEach((g, e) => I.setEngineGain(e, g));
   }
   process(inputs, outputs) {

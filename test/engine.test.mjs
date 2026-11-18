@@ -4,7 +4,11 @@
 import { Instrument } from '../engine/instrument.js';
 import { PARAMS, BASE, OUT_DEFAULT, fullParams, zoneSizes, engineOf } from '../sound/params.js';
 import { free, recipe, alter, RECIPE_TYPES } from '../sound/makers.js';
-import { basic, read, fft, LEVELS } from '../engine/tables.js';
+import { readFileSync } from 'node:fs';
+import { basic, builtin, read, fft, LEVELS, BUILTINS as MAKERS, fromFrames, DEFAULT_TABLE } from '../engine/tables.js';
+// (the tables the voice holds: the voice's own copy of the module, by the same cache-busting stamp it imports it with)
+const STAMP = (/from '\.\/tables\.js(\?v=\w+)?'/.exec(readFileSync(new URL('../engine/voice.js', import.meta.url), 'utf8')) || [])[1] || '';
+const { need, hold, table } = await import('../engine/tables.js' + STAMP);
 import { renderSound } from '../engine/offline.js';
 let fails = 0, checks = 0;
 const ok = (c, m) => { checks++; if (!c) { fails++; console.log('FAIL', m); } };
@@ -122,15 +126,20 @@ const spectrum = (x) => { // power by bin of a Blackman-Harris windowed block (s
 // every harmonic up to a quarter of the sample rate within 0.5 dB of the table's own (the band-limiting takes
 // nothing from the audible range below that); the low notes keep their highs (to 16 kHz at C-2 and below) ----
 const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
-const BUILTINS = [basic()]; // (build step 3 adds the rest here)
-for (const T of BUILTINS) for (const rate of [48000, 44100]) {
-  let worstAlias = -999, worstBand = 0, lowTop = Infinity; const where = [];
+const BUILTINS = MAKERS.map((b) => (b[0] === DEFAULT_TABLE ? basic() : builtin(b[0])));
+const t0 = Date.now();
+for (const T of process.env.QUICK ? [] : BUILTINS) for (const rate of [48000, 44100]) {
+  let worstAlias = -999, worstBand = 0, lowTop = Infinity, quiet = 0; const where = [];
   const pitches = [4.0879, ...Array.from({ length: 19 }, (_, i) => midiHz(i * 6)), midiHz(105), midiHz(107)];
   for (const hz of pitches) for (const pos of [0, 0.25, 0.5, 0.75, 1]) {
     // the reference: this frame's own spectrum, from the full-band copy
     const N0 = T.size[0], fp = pos * (T.frames - 1), f0 = Math.min(fp | 0, T.frames - 2), ff = fp - f0, ref = new Float64Array(N0), rim = new Float64Array(N0);
     for (let i = 0; i < N0; i++) ref[i] = T.data[0][f0 * (N0 + 5) + 2 + i] * (1 - ff) + T.data[0][(f0 + 1) * (N0 + 5) + 2 + i] * ff;
-    fft(ref, rim, -1); const want = (k) => Math.hypot(ref[k], rim[k]) / (N0 / 2);
+    fft(ref, rim, -1); const want = (k) => (k < N0 / 2 ? Math.hypot(ref[k], rim[k]) / (N0 / 2) : 0);
+    // (a frame with almost nothing under half the rate at this pitch, such as SYNC's last, a pure 8th harmonic, plays
+    // almost silence up here: nothing to measure)
+    let inband = 0, full = 0, kmax = 1; for (let k = 1; k < N0 / 2; k++) { const w = want(k) ** 2; full += w; if (k * hz < rate / 2) { inband += w; if (w > want(kmax) ** 2) kmax = k; } }
+    if (inband < 1e-3 * full) { quiet++; continue; }
     const n = hz < 30 ? 1 << 19 : hz < 300 ? 1 << 17 : 1 << 15, x = new Float64Array(n); let ph = 0;
     for (let i = 0; i < n; i++) { x[i] = read(T, pos, ph, hz, rate); ph += hz / rate; ph -= Math.floor(ph); }
     const p = spectrum(x), bin = rate / n; let all = 0, off = 0;
@@ -138,20 +147,33 @@ for (const T of BUILTINS) for (const rate of [48000, 44100]) {
     for (let k = 1; k < n / 2; k++) { all += p[k]; const h = k * bin / hz, hk = Math.round(h); if (Math.abs(h - hk) * hz > 8 * bin || hk < 1) off += p[k]; else harm[hk] += p[k]; }
     const db = 10 * Math.log10(off / all); if (db > worstAlias) { worstAlias = db; where[0] = `${hz.toFixed(1)} Hz pos ${pos}`; }
     // (the window's power gain: compare with the fundamental, as ratios of the table's own)
-    const g1 = Math.sqrt(harm[1]) / want(1);
+    const g1 = Math.sqrt(harm[kmax]) / want(kmax);
     let top = 0;
-    for (let k = 2; k < harm.length && k * hz < rate / 2; k++) {
-      const w = want(k); if (w < want(1) * 1e-4) continue; // (harmonics under -80 dB of the fundamental: too faint to judge)
+    for (let k = 1; k < harm.length && k * hz < rate / 2; k++) {
+      const w = want(k); if (w < want(kmax) * 1e-4) continue; // (harmonics under -80 dB of the strongest: too faint to judge)
       const got = 20 * Math.log10(Math.sqrt(harm[k]) / g1 / w);
-      if (got > -0.5) top = k * hz; else if (k * hz <= rate * 0.24 && -got > worstBand) { worstBand = -got; where[1] = `${hz.toFixed(1)} Hz pos ${pos}, harmonic ${k}`; }
+      // (at C-2 and below, everything up to 15.5 kHz must be kept; above, up to a quarter of the rate)
+      if (got > -0.5) top = k * hz; else if (k * hz <= (hz < 9 ? 15500 : rate * 0.24) && -got > worstBand) { worstBand = -got; where[1] = `${hz.toFixed(1)} Hz pos ${pos}, harmonic ${k}`; }
     }
     if (hz < 9 && pos === 0.5) lowTop = Math.min(lowTop, top);
   }
-  console.log(`  ${T.name} at ${rate}: worst aliasing ${worstAlias.toFixed(1)} dB (${where[0]}), worst loss under ${rate * 0.24} Hz ${worstBand.toFixed(2)} dB, a saw at C-2 and below reaches ${Math.round(lowTop)} Hz`);
+  console.log(`  ${T.name} at ${rate}: worst aliasing ${worstAlias.toFixed(1)} dB (${where[0]}), worst loss under ${rate * 0.24} Hz ${worstBand.toFixed(2)} dB, a saw at C-2 and below reaches ${Math.round(lowTop)} Hz${quiet ? ` (${quiet} near-silent cases skipped)` : ''}`);
   ok(worstAlias < -60, `${T.name} at ${rate}: aliasing ${worstAlias.toFixed(1)} dB at ${where[0]}`);
   ok(worstBand < 0.5, `${T.name} at ${rate}: a harmonic under a quarter of the rate lost ${worstBand.toFixed(2)} dB at ${where[1]}`);
-  ok(lowTop >= 15500, `${T.name} at ${rate}: a saw at C-2 and below only reaches ${lowTop} Hz`);
+  if (T.name === 'BASIC') ok(lowTop >= 15500, `${T.name} at ${rate}: a saw at C-2 and below only reaches ${lowTop} Hz`);
 }
+console.log(`  (every built-in table checked in ${((Date.now() - t0) / 1000).toFixed(1)} s)`);
+// every built-in table: the same every time it is built (the seeded ones too), every sample a number, each frame
+// peaking at 1, and the frames all different (a sweep, not a still)
+for (const T of BUILTINS) {
+  const again = builtin(T.id), N0 = T.size[0], d = T.data[0], frame = (f) => d.subarray(f * (N0 + 5) + 2, f * (N0 + 5) + 2 + N0);
+  ok(T.data.every((x, l) => x.every((v, i) => v === again.data[l][i])), `${T.name} is not the same twice`);
+  ok(T.data.every((x) => x.every(Number.isFinite)), `${T.name} has a sample that is not a number`);
+  let worst = 0, same = 0; for (let f = 0; f < T.frames; f++) { let m = 0; for (const v of frame(f)) m = Math.max(m, Math.abs(v)); worst = Math.max(worst, Math.abs(m - 1)); if (f && frame(f).every((v, i) => Math.abs(v - frame(f - 1)[i]) < 1e-6)) same++; }
+  ok(worst < 1e-5, `a ${T.name} frame does not peak at 1: ${worst}`);
+  ok(same === 0, `${T.name}: ${same} frames are the same as the one before`);
+}
+ok(BUILTINS.length === 11 && new Set(BUILTINS.map((t) => t.id)).size === 11 && BUILTINS.every((t) => /^builtin:[a-z]+$/.test(t.id)), 'the built-in ids');
 // no stepping: a saw and a narrow pulse sweeping from C7 down to C-2 and back over 4 s: the level of each 50 ms
 // stays within 1.5 dB of its neighbour, and the waveform never jumps (a change of copy is a crossfade)
 for (const pos of [0.5, 1]) { const T = BUILTINS[0], n = 4 * fs; let ph = 0, prev = null, worst = 0, at = 0, rms = 0, cnt = 0, jump = 0, last = 0;
@@ -188,5 +210,44 @@ for (const pos of [0.5, 1]) { const T = BUILTINS[0], n = 4 * fs; let ph = 0, pre
   const n = 0.3 * fs, EL = new Float32Array(n); for (let i = 0; i < n; i += B) { I.render(new Float32Array(B), new Float32Array(B)); EL.set(I.EL[0].subarray(0, Math.min(B, n - i)), i); }
   ok(EL.every((v, i) => v === off.L[i]), 'the offline render differs from the instrument');
   ok(off.peak > 0 && off.length > 0 && off.length <= n, 'the offline render: peak and length'); }
+// ---- tables in the voice ----
+// a table the thread doesn't hold plays BASIC (and nothing breaks); once it arrives, the next note uses it
+{ const p = { ...BASE, a_pos: 0.5, p_amt: 0 }, want = renderSound(p, OUT_DEFAULT, 100, 0.2, fs).L;
+  const gone = renderSound({ ...p, $a: 'user:00000000000000ff' }, OUT_DEFAULT, 100, 0.2, fs).L;
+  ok(gone.every((v, i) => v === want[i]), 'a missing table does not play BASIC');
+  need('builtin:grit'); const g = renderSound({ ...p, $a: 'builtin:grit' }, OUT_DEFAULT, 100, 0.2, fs).L;
+  ok(g.some((v, i) => Math.abs(v - want[i]) > 0.01), 'GRIT plays the same as BASIC'); }
+// a table changed during a note crossfades: at any point of the cycle, no step bigger than the two tables' own
+{ need('builtin:bend'); // (BEND's first frame is a cosine, upside down: a sine turned a quarter-cycle on, so a hard switch would jump)
+  const p = { ...BASE, a_pos: 0, a_tune: 0, p_amt: 0, decay: 0.9, hold: 0.8 };
+  // (the engine's own output, before the master: the master's gain moves with the level)
+  const pre = (inst, n) => { const L = new Float32Array(n); for (let i = 0; i < n; i += B) { inst.render(new Float32Array(B), new Float32Array(B)); L.set(inst.EL[0].subarray(0, Math.min(B, n - i)), i); } return L; };
+  let worst = 0, last = null;
+  for (let k = 0; k < 8; k++) {
+    const n0 = (40 + k) * B, I = new Instrument(fs); I.play(0, { ...p, $a: DEFAULT_TABLE }, OUT_DEFAULT, 100);
+    const a = pre(I, n0); I.update(0, { $a: 'builtin:bend' }, null); const b = pre(I, fs / 50);
+    const I2 = new Instrument(fs); I2.play(0, { ...p, $a: 'builtin:bend' }, OUT_DEFAULT, 100); const sq = pre(I2, n0 + fs / 50).subarray(n0);
+    const own = Math.max(maxStep(a, n0 - 400), maxStep(sq)), jump = Math.abs(b[0] - a[n0 - 1]), at = Math.max(maxStep(b), jump);
+    worst = Math.max(worst, at / own); last = [b, sq];
+  }
+  ok(worst <= 1.05, `a table change mid-note steps by ${worst.toFixed(2)} times the tables' own`);
+  ok(Math.abs(peak(last[0], fs / 100) - peak(last[1], fs / 100)) < 0.02, 'after a table change the note plays the new table'); }
+// a user table from frames: a saw drawn naively (every sample, all its aliasing included) reads band-limited
+{ const frames = Array.from({ length: 4 }, (_, f) => Float32Array.from({ length: 2048 }, (_, i) => (((i / 2048) * (f + 1)) % 1) * 2 - 1));
+  const T = fromFrames('user:0123456789abcdef', 'TEST', frames); hold(T);
+  ok(table('user:0123456789abcdef') === T && T.frames === 4, 'a user table is held');
+  let worst = -999;
+  for (const hz of [110, 1000, 3000]) for (const pos of [0, 1]) {
+    const n = 1 << 15, x = new Float64Array(n); let ph = 0; for (let i = 0; i < n; i++) { x[i] = read(T, pos, ph, hz, fs); ph = (ph + hz / fs) % 1; }
+    const sp = spectrum(x), bin = fs / n; let all = 0, off = 0;
+    for (let k = 1; k < n / 2; k++) { all += sp[k]; const h = k * bin / hz; if (Math.abs(h - Math.round(h)) * hz > 8 * bin || Math.round(h) < 1) off += sp[k]; }
+    worst = Math.max(worst, 10 * Math.log10(off / all));
+  }
+  ok(worst < -60, `a user table aliases at ${worst.toFixed(1)} dB`); }
+// the offline render with a table other than BASIC is still the instrument's voice
+{ const p = { ...recipe(seeded(5), 'closed hat'), $a: 'builtin:grit', $b: 'builtin:sparse' }; need('builtin:sparse');
+  const off = renderSound(p, OUT_DEFAULT, 100, 0.2, fs), I = new Instrument(fs); I.play(0, p, OUT_DEFAULT, 100);
+  const n = 0.2 * fs, EL = new Float32Array(n); for (let i = 0; i < n; i += B) { I.render(new Float32Array(B), new Float32Array(B)); EL.set(I.EL[0].subarray(0, Math.min(B, n - i)), i); }
+  ok(EL.every((v, i) => v === off.L[i]), 'the offline render with tables differs from the instrument'); }
 console.log(fails ? `${fails} of ${checks} checks failed` : `ok: ${checks} checks`);
 process.exit(fails ? 1 : 0);

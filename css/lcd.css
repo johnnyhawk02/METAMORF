@@ -618,3 +618,20 @@ html.phone .pv { position: relative; display: grid; grid-template-columns: repea
 .pad.e1, .pad.e3 { background: rgb(var(--ink-rgb) / .09); }
 /* the FX + MASTER tab: the distortion's column, then the output */
 .fxcol .sect.mout { padding-top: 4px; }
+
+/* ---- SETTINGS in two columns; WAVETABLES: LOAD WAV, the frame-size question, the list (name, frames, a drawing, X) ---- */
+.menupanel.settings { width: 860px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 22px; align-items: start; }
+.menupanel.settings[hidden] { display: none; }
+.menupanel.settings .scol > h3:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
+.menupanel.settings .wtrow { grid-template-columns: 1fr 2fr; }
+.menupanel.settings .wtrow .note { grid-column: auto; }
+.wtsizes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 6px 0; }
+.wtsizes p { grid-column: 1 / -1; margin: 0; font-size: 14px; letter-spacing: 1px; line-height: 1.15; }
+.wtsizes .btn { padding: 3px 4px; min-width: 0; font-size: 16px; }
+.menupanel .wtlist { margin-top: 8px; max-height: min(196px, 26vh); }
+.menupanel .wtlist .prow { grid-template-columns: 1fr 64px auto; }
+.menupanel .wtlist .wtname { font-size: 17px; letter-spacing: 1px; padding: 3px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; }
+.menupanel .wtlist .wtname small { font-size: 13px; opacity: .7; margin-left: 6px; }
+.menupanel .wtlist svg { width: 64px; height: 28px; align-self: center; }
+.menupanel .wtlist svg path { fill: none; stroke: var(--ink); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.wtsizes[hidden] { display: none; }

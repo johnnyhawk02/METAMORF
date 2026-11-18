@@ -4,12 +4,19 @@
 // pads). Plays through the page's test hook (window.metamorf), so no MIDI device is needed. Fails on any page error.
 // Start the page first: node tools/serve.mjs
 import { createRequire } from 'node:module';
-import { readFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 const require = createRequire(import.meta.url);
 let chromium; try { ({ chromium } = require('playwright')); } catch (e) { ({ chromium } = require(require('node:child_process').execSync('npm root -g').toString().trim() + '/playwright')); }
 const url = process.argv[2] || 'http://localhost:8123/';
 const out = process.argv[3] || 'shots';
 mkdirSync(out, { recursive: true });
+// two WAV files for SETTINGS > WAVETABLES: 4 frames of 2048 (a sine turning to a square), and 3000 samples with no
+// marker (it asks for the frame size)
+const wavFile = (x) => { const n = x.length, d = Buffer.alloc(44 + n * 2); d.write('RIFF', 0); d.writeUInt32LE(36 + n * 2, 4); d.write('WAVEfmt ', 8); d.writeUInt32LE(16, 16);
+  d.writeUInt16LE(1, 20); d.writeUInt16LE(1, 22); d.writeUInt32LE(48000, 24); d.writeUInt32LE(96000, 28); d.writeUInt16LE(2, 32); d.writeUInt16LE(16, 34); d.write('data', 36); d.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) d.writeInt16LE(Math.round(Math.max(-1, Math.min(1, x[i])) * 32767), 44 + i * 2); return d; };
+writeFileSync(`${out}/four-frames.wav`, wavFile(Float32Array.from({ length: 8192 }, (_, i) => { const f = i >> 11, s = Math.sin(2 * Math.PI * (i % 2048) / 2048); return Math.tanh(s * (1 + 6 * f)) * 0.8; })));
+writeFileSync(`${out}/odd-length.wav`, wavFile(Float32Array.from({ length: 3000 }, (_, i) => Math.sin(2 * Math.PI * (i % 1000) / 1000) * 0.5)));
 const b = await chromium.launch();
 let errors = 0;
 const J = JSON.stringify;
@@ -116,6 +123,47 @@ for (const [w, h] of [[1440, 900], [1280, 800], [1440, 760], [1280, 700]]) {
     if (a[0] !== 1 || a[1] || a[2] !== '' || !dirty[0] || dirty[1] !== '*' || c || d !== 2 || file.app !== 'metamorf' || file.items.length !== 2 || im !== 0 || im2 !== 1 || !got || /[<>=()]/.test(got[0] + got[1]) || got[2] !== 1)
       bad('presets', a, dirty, c, d, file.items.length, im, im2, got);
     await p.keyboard.press('Escape');
+  }
+  // ---- TABLE: a knob on each oscillator stepping through the tables; SETTINGS > WAVETABLES loads a WAV, asks the
+  // frame size when it must, lists and deletes; a preset file carries the user's table; a key on it renders ----
+  if (w === 1440 && h === 900) {
+    const tk = (n) => p.locator(knobSel('table')).nth(n);
+    const t = () => M(() => { const k = metamorf.keys()[metamorf.cur()]; return [k.t.a, k.t.b, [...document.querySelectorAll('.faders .vf')].filter((e) => e.querySelector('.lab').textContent === 'table').map((e) => e.querySelector('output').textContent)]; });
+    const t0 = await t(); await M(() => metamorf.noteOn(1, 60, 100)); await M(() => metamorf.noteOff(60));
+    if (t0[2].length !== 2) bad('two TABLE knobs', t0);
+    // (a key's table: down to BASIC first, then up two steps)
+    await drag(knobSel('table'), false, 200); const t1 = await t(); await drag(knobSel('table'), true, 30); const t2 = await t();
+    if (t1[0] !== 'builtin:basic' || t1[2][0] !== 'BASIC' || t2[0] === 'builtin:basic' || !t2[0].startsWith('builtin:') || !/TABLE/.test(await p.textContent('#detail'))) bad('the TABLE knob', t1, t2);
+    await p.click('#undo'); const t3 = await t(); if (t3[0] !== t0[0]) bad('UNDO of a table (one step: the same knob within 1.2 s)', t0, t3);
+    // a WAV with 4 frames of 2048: loaded at once
+    await p.click('#settings-btn'); await p.setInputFiles('#wt-file', `${out}/four-frames.wav`); await p.waitForTimeout(400);
+    const u1 = await M(() => [metamorf.tables(), document.getElementById('detail').textContent, document.querySelectorAll('#wt-list .prow').length]);
+    if (u1[0].length !== 1 || u1[0][0].count !== 4 || u1[0][0].name !== 'FOUR-FRAMES' || !/loaded FOUR-FRAMES: 4 frames/.test(u1[1]) || u1[2] !== 1) bad('a WAV loaded', u1);
+    // the same file again: nothing added
+    await p.setInputFiles('#wt-file', `${out}/four-frames.wav`); await p.waitForTimeout(300);
+    if ((await M(() => metamorf.tables().length)) !== 1 || !/already loaded/.test(await p.textContent('#detail'))) bad('the same WAV twice');
+    // 3000 samples and no marker: it asks; 1000 is not offered, so the whole file is one cycle (an odd one, but kept)
+    await p.setInputFiles('#wt-file', `${out}/odd-length.wav`); await p.waitForTimeout(300);
+    const ask = await M(() => [!document.getElementById('wt-sizes').hidden, [...document.querySelectorAll('#wt-sizes .btn')].map((b) => b.textContent + (b.disabled ? '-' : ''))]);
+    if (!ask[0] || J(ask[1]) !== J(['256', '512', '1024', '2048', '4096-', 'WHOLE FILE'])) bad('the frame-size question', ask);
+    await p.screenshot({ path: `${out}/wavetables-ask.png` });
+    await p.click('#wt-sizes .btn:text-is("1024")'); await p.waitForTimeout(300);
+    const u2 = await M(() => [metamorf.tables().map((x) => x.count), document.getElementById('wt-sizes').hidden]);
+    if (J(u2) !== J([[4, 2], true])) bad('a WAV at a frame size picked', u2);
+    await p.screenshot({ path: `${out}/wavetables.png` });
+    // delete the second: X, then SURE?
+    await p.locator('#wt-list .pdel').nth(1).click(); const sure = await p.locator('#wt-list .pdel').nth(1).textContent(); await p.locator('#wt-list .pdel').nth(1).click(); await p.waitForTimeout(200);
+    if (sure !== 'SURE?' || (await M(() => metamorf.tables().length)) !== 1) bad('delete a table', sure);
+    await p.keyboard.press('Escape');
+    // the TABLE knob reaches it (the last step), the key renders on it, the preset file carries it
+    await drag(knobSel('table'), true, 400); const t4 = await t();
+    if (!t4[0].startsWith('user:') || t4[2][0] !== 'FOUR-FRAMES') bad('the TABLE knob on a user table', t4);
+    await M(() => { const k = metamorf.keys()[metamorf.cur()]; k.p.a_level = 1; }); // (OSC A at full level on this key, whatever the sound had)
+    const r = await M(() => metamorf.render(metamorf.cur(), 0.3).then((x) => x.peak, (e) => String(e)));
+    if (!(r > 0.01)) bad('a render on a user table', r);
+    await p.click('#preset-btn'); await p.click('#preset-save'); const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#preset-export')]); await p.keyboard.press('Escape');
+    const file = JSON.parse(readFileSync(await dl.path(), 'utf8')), id = t4[0];
+    if (!file.tables || !file.tables[id] || file.tables[id].count !== 4 || typeof file.tables[id].data !== 'string') bad('a preset file without its table', Object.keys(file.tables || {}));
   }
   // ---- the FX + MASTER tab, and back ----
   await p.keyboard.press('f'); await p.waitForTimeout(100);

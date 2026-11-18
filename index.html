@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
-<link rel="stylesheet" href="css/lcd.css?v=mwm61gqf">
+<link rel="stylesheet" href="css/lcd.css?v=mwm79h1i">
 <script>
 // a phone held upright gets the phone view from the first paint, before the wide screen can make the browser zoom out
 // (app/main.js keeps it in step after that). ?phone asks for it anywhere, ?desktop for the big screen on a phone
@@ -56,6 +56,7 @@
     <div class="menu" id="smenu">
       <button class="btn" id="settings-btn" aria-haspopup="true" aria-expanded="false" title="Tempo, the keyboard's layout, the screen's colours and the hardware knobs">SETTINGS ▾</button>
       <div class="menupanel settings" id="settings-panel" hidden>
+       <div class="scol">
         <h3>TEMPO</h3>
         <div class="lowkey" role="group" aria-label="Tempo"><span class="dim">BPM</span><button class="btn sm" id="bpm-down" title="Slower (Shift: by 10)">−</button><b class="lcdbox bpm" id="bpm" title="The tempo: − and + change it (Shift: by 10), double-click for 120">120</b><button class="btn sm" id="bpm-up" title="Faster (Shift: by 10)">+</button></div>
         <p class="dim note">THE GRID A HELD KEY COMES BACK ON: − AND + (SHIFT: BY 10), DOUBLE-CLICK THE NUMBER FOR 120</p>
@@ -65,6 +66,16 @@
         <div class="lowkey" role="group" aria-label="How many engines share the keys"><span class="dim">ENGINES</span><button class="btn sm" id="eng-down" title="One engine fewer: the keys split into fewer, wider zones">−</button><b class="lcdbox" id="engines">4</b><button class="btn sm" id="eng-up" title="One engine more (up to 4): each plays one key at a time on its own zone">+</button></div>
         <div class="lowkey" role="group" aria-label="Lowest key of the layout"><span class="dim">LOW KEY</span><button class="btn sm" id="low-down" title="Move the whole layout down an octave">−</button><b class="lcdbox" id="low-key"></b><button class="btn sm" id="low-up" title="Move the whole layout up an octave">+</button></div>
         <p class="dim note">THE LOWEST OF THE 25 KEYS: − AND + MOVE THE WHOLE LAYOUT BY AN OCTAVE</p>
+        <h3>WAVETABLES <span class="dim" id="wt-count"></span></h3>
+        <div class="randrow wtrow">
+          <button class="btn" id="wt-load" title="Load a WAV file as a wavetable: one cycle per frame, up to 256 frames. It is kept in this browser and the TABLE knobs can pick it">LOAD WAV</button>
+          <span class="dim note" id="wt-info">YOUR OWN TABLES, FROM WAV FILES: KEPT IN THIS BROWSER</span>
+        </div>
+        <input type="file" id="wt-file" accept=".wav,audio/wav,audio/x-wav,audio/wave" hidden>
+        <div class="wtsizes" id="wt-sizes" hidden></div>
+        <div class="plist wtlist" id="wt-list"></div>
+       </div>
+       <div class="scol">
         <h3>SCREEN COLOURS</h3>
         <div class="randrow themes" id="themes"></div>
         <div class="lowkey colour"><span class="dim">PANEL</span><input type="color" id="col-panel" aria-label="The screen's background colour" title="The screen's background colour"></div>
@@ -77,6 +88,7 @@
           <button class="btn" id="cc-reset" title="Knobs back to the Bass Station 2 map">BS2 MAP</button>
           <span class="dim note">LEARN: PRESS, CLICK A CONTROL ON SCREEN, TURN A KNOB</span>
         </div>
+       </div>
       </div>
     </div>
     <div class="menu" id="menu">
@@ -195,6 +207,6 @@
   }, 5000);
 })();
 </script>
-<script type="module" src="app/main.js?v=mwm61gqf"></script>
+<script type="module" src="app/main.js?v=mwm79h1i"></script>
 </body>
 </html>
