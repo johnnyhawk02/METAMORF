@@ -4,8 +4,8 @@
 // Each engine plays one note at a time: a new note fades the old one out over 3 ms while it starts. A note coming back
 // (RETURN: the zone going back to an earlier held key) starts on the next step of the BPM grid. The reverb send is
 // collected per engine already; the reverb itself and the compressor come in build step 8.
-import { Voice } from './voice.js?v=mwm5nxnv';
-import { Dirt, DIRT_DEFAULTS } from '../sound/dirt.js?v=mwm5nxnv';
+import { Voice } from './voice.js?v=mwm61gqf';
+import { Dirt, DIRT_DEFAULTS } from '../sound/dirt.js?v=mwm61gqf';
 
 export const MASTER_DEFAULTS = { level: 80 };
 export const TEMPO_DEFAULTS = { bpm: 120, ret: 2 };
@@ -26,7 +26,7 @@ export class Instrument {
     this.fs = fs; this.n = 4; this.clock = 0;
     this.eng = [0, 1, 2, 3].map(() => new Engine(fs));
     this.dirt = new Dirt(fs);
-    this.fx = structuredClone(FX_DEFAULTS);
+    this.fx = JSON.parse(JSON.stringify(FX_DEFAULTS)); // (structuredClone is not there on the audio thread)
     this.gain = masterGain(this.fx.master.level); this.glide = 1 - Math.exp(-1 / (0.01 * fs));
     this.alloc(block);
   }

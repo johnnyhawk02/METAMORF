@@ -22,6 +22,9 @@ for (const [w, h] of [[1440, 900], [1280, 800], [1440, 760], [1280, 700]]) {
   await p.waitForTimeout(300);
   if (w === 1440 && h === 900) await p.screenshot({ path: `${out}/start-${w}x${h}.png` });
   await p.click('#start-btn'); await p.waitForTimeout(400);
+  // the sound: a key played is heard (the engine runs on the audio thread and sends back its peaks), with no error
+  if (w === 1440 && h === 900) { await p.evaluate(() => metamorf.noteOn(1, 60, 100)); await p.waitForTimeout(500); await p.evaluate(() => metamorf.noteOff(60));
+    const au = await p.evaluate(() => metamorf.audio()); if (au.state !== 'running' || !(au.heard > 0.01) || au.error) bad('no sound', au); }
   const M = (f, a) => p.evaluate(f, a);
   // a knob turned the only way it turns: pressed and dragged (up: true turns it up)
   const drag = async (sel, up, dy = 30, n = 0) => { const k = p.locator(sel).nth(n), r = await k.boundingBox(), x = r.x + r.width / 2, y = r.y + r.height / 2;
@@ -160,6 +163,8 @@ for (const [w, h] of [[412, 915], [412, 780], [360, 640]]) {
       down: document.querySelectorAll('.pad.down').length, out: document.querySelector('#pv-reverb output').textContent, undo: !document.getElementById('pv-undo').disabled, patch: document.getElementById('pv-name').textContent }; });
   const at9 = await mid('.pad', 9); await p.touchscreen.tap(at9.x, at9.y); await p.waitForTimeout(200); const a = await st();
   if (a.i !== 9 || a.key !== 'A2' || !/^ENGINE 2 · /.test(a.what) || a.down) bad('a tap', a);
+  // the tap was heard: the audio thread ran the engine and played it (peaks came back), with no error
+  { await p.waitForTimeout(300); const au = await p.evaluate(() => metamorf.audio()); if (au.state !== 'running' || !(au.heard > 0.01) || au.error) bad('no sound from a pad', au); }
   const at2 = await mid('.pad', 2), at20 = await mid('.pad', 20);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: at2.x, y: at2.y, id: 1 }] });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: at2.x, y: at2.y, id: 1 }, { x: at20.x, y: at20.y, id: 2 }] }); await p.waitForTimeout(200);
