@@ -1,7 +1,7 @@
 // The audio thread: the instrument (engine/instrument.js) in an AudioWorklet. The page sends it notes and settings
 // as messages (and the wavetables the sounds name, built beside the page); it sends back the engines' peaks and the distortion's sidechain envelope for the meters.
-import { Instrument } from '../engine/instrument.js?v=mwm79h1i';
-import { hold, drop } from '../engine/tables.js?v=mwm79h1i';
+import { Instrument } from '../engine/instrument.js?v=mwm7rfj6';
+import { hold, drop } from '../engine/tables.js?v=mwm7rfj6';
 
 class Metamorf extends AudioWorkletProcessor {
   constructor() {

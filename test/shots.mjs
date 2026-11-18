@@ -36,7 +36,7 @@ for (const [w, h] of [[1440, 900], [1280, 800], [1440, 760], [1280, 700]]) {
   // a knob turned the only way it turns: pressed and dragged (up: true turns it up)
   const drag = async (sel, up, dy = 30, n = 0) => { const k = p.locator(sel).nth(n), r = await k.boundingBox(), x = r.x + r.width / 2, y = r.y + r.height / 2;
     await p.mouse.move(x, y); await p.mouse.down(); for (let i = 1; i <= 5; i++) await p.mouse.move(x, y + (up ? -1 : 1) * dy * i / 5); await p.mouse.up(); };
-  const knobSel = (label) => `.faders .vf:has(.lab:text-is("${label}")) .knob`;
+  const knobSel = (label, sec) => `.faders ${sec ? `.sect:has(> h3:text-is("${sec}")) ` : ''}.vf:has(.lab:text-is("${label}")) .knob`;
   // ---- the layout: nothing scrolls, everything inside the window, every knob on the grid's columns ----
   const lay = await M(() => {
     const r = (e) => e.getBoundingClientRect(), f = document.getElementById('faders'), fr = r(f), cols = Number(getComputedStyle(f).getPropertyValue('--cols')) || 16;
@@ -61,12 +61,12 @@ for (const [w, h] of [[1440, 900], [1280, 800], [1440, 760], [1280, 700]]) {
     if (s.cur !== 2 || s.note !== 'D2' || !/ENGINE 1 D2 #50 · V90/.test(s.last) || !/ENGINE 1/.test(s.tab)) bad('a key played', s); }
   // ---- a knob: dragged up it turns, its label lights, a notch marks where it was; double-click puts it back; UNDO too ----
   const val = (id) => M((id) => metamorf.keys()[metamorf.cur()].p[id], id);
-  { const d0 = await val('decay'); await drag(knobSel('decay'), true); const d1 = await val('decay');
+  { const d0 = await val('decay'); await drag(knobSel('decay', 'amp'), true); const d1 = await val('decay');
     const lit = await M(() => [[...document.querySelectorAll('.faders .vf')].find((e) => e.querySelector('.lab').textContent === 'decay').classList.contains('keyed'), document.getElementById('kh-info').textContent]);
     if (!(d1 > d0) || !/1 edit/.test(lit[1])) bad('a knob turned', d0, d1, lit);
-    await p.dblclick(knobSel('decay')); const d2 = await val('decay');
+    await p.dblclick(knobSel('decay', 'amp')); const d2 = await val('decay');
     if (d2 !== d0) bad('double-click puts it back', d0, d2);
-    await drag(knobSel('decay'), false); const d3 = await val('decay'); await p.click('#undo'); const d4 = await val('decay');
+    await drag(knobSel('decay', 'amp'), false); const d3 = await val('decay'); await p.click('#undo'); const d4 = await val('decay');
     if (!(d3 < d0) || d4 !== d0) bad('undo a drag', d0, d3, d4); }
   // only a drag turns a knob: the wheel, hovering and the arrow keys don't
   { const d0 = await val('tune'), r = await p.locator(knobSel('tune')).boundingBox();
@@ -86,15 +86,15 @@ for (const [w, h] of [[1440, 900], [1280, 800], [1440, 760], [1280, 700]]) {
     const p1 = await M(() => [JSON.stringify(metamorf.keys()[metamorf.cur()].p), document.getElementById('detail').textContent]);
     if (p1[0] === p0 || !/altered/.test(p1[1])) bad('alter key', p1[1]); }
   // ---- LOCK KEY: the header turns, the dice is off, a knob doesn't move ----
-  { await p.click('#lock-key'); const d0 = await val('decay'); await drag(knobSel('decay'), true);
+  { await p.click('#lock-key'); const d0 = await val('decay'); await drag(knobSel('decay', 'amp'), true);
     const s = await M(() => [document.getElementById('screen').classList.contains('keylocked'), document.getElementById('rand-key').disabled, document.querySelectorAll('.k.locked').length]);
     if (!s[0] || !s[1] || s[2] !== 1 || await val('decay') !== d0) bad('lock key', s); await p.click('#lock-key', { force: true }); }
   // ---- a knob padlock: RANDOM on the engine leaves that knob as each key had it ----
-  { await p.locator('.faders .vf:has(.lab:text-is("decay")) .lock').first().click();
+  { await p.locator(knobSel('decay', 'amp').replace(/ \.knob$/, ' .lock')).first().click();
     const before = await M(() => metamorf.keys().slice(0, 6).map((k) => k.p.decay));
     await p.click('#menu-btn'); await p.click('#scatter'); await p.waitForTimeout(150);
     const after = await M(() => [metamorf.keys().slice(0, 6).map((k) => k.p.decay), metamorf.keys().slice(0, 6).map((k) => k.name), document.getElementById('detail').textContent, document.getElementById('lock-count').textContent]);
-    if (J(before) !== J(after[0]) || !/locked DECAY kept/.test(after[2]) || after[3] !== '1 LOCKED') bad('padlock', before, after);
+    if (J(before) !== J(after[0]) || !/locked AMP DECAY kept/.test(after[2]) || after[3] !== '1 LOCKED') bad('padlock', before, after);
     await p.click('#lock-none'); await p.keyboard.press('Escape'); }
   // ---- COPY and PASTE ----
   { await M(() => metamorf.noteOn(1, 48, 100)); await p.click('#copy-key'); await M(() => metamorf.noteOn(1, 60, 100)); await p.click('#paste-key');

@@ -14,6 +14,11 @@ const BASIC_NAMES = ['SINE', 'TRI', 'SAW', 'SQUARE', 'PULSE'];
 const posText = (x) => { const f = x * 4, i = Math.min(3, Math.floor(f)), t = f - i; return t < 0.05 ? BASIC_NAMES[i] : t > 0.95 ? BASIC_NAMES[i + 1] : `${BASIC_NAMES[i]}>${BASIC_NAMES[i + 1].slice(0, 3)} ${Math.round(t * 100)}`; };
 // RATIO: shown to two places, with a whole ratio named when it is close (the knob never snaps)
 const ratioText = (r) => (Math.abs(r - Math.round(r)) < 0.01 && r >= 0.99 ? '×' + Math.round(r) : '×' + (r < 10 ? r.toFixed(2) : r.toFixed(1)));
+// NOISE COLOUR: dark, white, bright; CLICK SHAPE: between its three
+const colourText = (c) => (Math.abs(c) < 0.03 ? 'WHITE' : (c < 0 ? 'DARK ' : 'BRIGHT ') + Math.round(Math.abs(c) * 100));
+const CLICKS = ['PULSE', 'CHIRP', 'BURST'];
+const clickShapeText = (x) => { const f = x * 2, i = Math.min(1, Math.floor(f)), t = f - i; return t < 0.05 ? CLICKS[i] : t > 0.95 ? CLICKS[i + 1] : `${CLICKS[i].slice(0, 3)}>${CLICKS[i + 1].slice(0, 3)} ${Math.round(t * 100)}`; };
+const hzText = (f) => (f < 1000 ? Math.round(f) + 'Hz' : (f / 1000).toFixed(f < 9950 ? 1 : 0) + 'k');
 const signed = (x, d = 0) => (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toFixed(d);
 
 // the curves, normalised value -> real units
@@ -36,6 +41,22 @@ export const PARAMS = [
   { id: 'b_det', label: 'detune', sec: 'osc b', map: 'bip', lo: -100, hi: 100, def: 0, safe: [-0.3, 0.3], show: (c) => signed(c) + 'c' },
   { id: 'b_track', label: 'track', sec: 'osc b', map: 'lin', lo: 0, hi: 1, def: 1, safe: [0, 1], show: (x) => Math.round(x * 100) + '%' },
   { id: 'b_level', label: 'level', sec: 'osc b', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 0.9], show: (x) => Math.round(x * 100) + '%', gate: true, dep: ['b_pos', 'b_ratio', 'b_det', 'b_track'] },
+  // FM: phase modulation each way (both: cross-FM)
+  { id: 'fm_ab', label: 'a > b', sec: 'fm', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 0.5], show: (x) => Math.round(x * 100) + '%', gate: true },
+  { id: 'fm_ba', label: 'b > a', sec: 'fm', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 0.4], show: (x) => Math.round(x * 100) + '%', gate: true },
+  // NOISE: on its own decay (a share of the amp's), seeded per note
+  { id: 'n_level', label: 'level', sec: 'noise', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 0.7], show: (x) => Math.round(x * 100) + '%', gate: true, dep: ['n_colour', 'n_decay', 'n_seed'] },
+  { id: 'n_colour', label: 'colour', sec: 'noise', map: 'bip', lo: -1, hi: 1, def: 0, safe: [-0.8, 1], show: colourText },
+  { id: 'n_decay', label: 'decay', sec: 'noise', map: 'log', lo: 0.1, hi: 2, def: Math.log(10) / Math.log(20), safe: [0.2, 1], show: (x) => '×' + x.toFixed(x < 1 ? 2 : 1) },
+  { id: 'n_seed', label: 'seed', sec: 'noise', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 1], show: (x) => String(Math.floor(x * 65535)) },
+  // CLICK: generated at the note's start
+  { id: 'c_level', label: 'level', sec: 'click', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 0.6], show: (x) => Math.round(x * 100) + '%', gate: true, dep: ['c_shape', 'c_tone', 'c_len', 'c_direct'] },
+  { id: 'c_shape', label: 'shape', sec: 'click', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 1], show: clickShapeText },
+  { id: 'c_tone', label: 'tone', sec: 'click', map: 'log', lo: 20, hi: 16000, def: Math.log(100) / Math.log(800), safe: [0.35, 1], show: hzText },
+  { id: 'c_len', label: 'length', sec: 'click', map: 'log', lo: 0.2, hi: 30, def: Math.log(15) / Math.log(150), safe: [0.1, 0.8], show: fmtMs },
+  { id: 'c_direct', label: 'direct', sec: 'click', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 1], show: (x) => Math.round(x * 100) + '%' },
+  // DRIVE: before the filters
+  { id: 'drive', label: 'amount', sec: 'drive', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 0.6], show: (x) => Math.round(x * 100) + '%', gate: true },
   // AMP
   { id: 'attack', label: 'attack', sec: 'amp', map: 'cube', lo: 0, hi: 200, def: 0, safe: [0, 0.35], show: fmtMs },
   { id: 'hold', label: 'hold', sec: 'amp', map: 'cube', lo: 0, hi: 500, def: 0, safe: [0, 0.4], show: fmtMs },
