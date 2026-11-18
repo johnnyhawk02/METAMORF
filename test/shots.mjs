@@ -176,6 +176,17 @@ for (const [w, h] of [[1440, 900], [1280, 800], [1440, 760], [1280, 700]]) {
   { await M(() => { metamorf.noteOn(1, 55, 100); metamorf.cc(91, 127); }); const s = await M(() => [metamorf.keys()[7].p.decay, document.getElementById('last-text').textContent]);
     await M(() => metamorf.cc(16, 20)); const t = await M(() => document.getElementById('last-text').textContent);
     if (s[0] !== 1 || !/DECAY/.test(s[1]) || !/CUTOFF/.test(t)) bad('CC', s, t); }
+  // ---- modulation (build step 6): MOD ENV and the LFO dim on a key with no route from them; a key's routes render,
+  // ALTER moves their amounts and keeps them, and they survive a reload ----
+  { const dim = () => M(() => ['mod env', 'lfo'].map((n) => [...document.querySelectorAll('.faders .sect')].find((e) => e.querySelector('h3')?.textContent === n)?.classList.contains('off')));
+    await M(() => { const k = metamorf.keys()[metamorf.cur()]; k.m = {}; }); await p.click('#alter-key'); await p.waitForTimeout(150); const d0 = await dim();
+    await M(() => { const k = metamorf.keys()[metamorf.cur()]; k.m = { 'env>cutoff': 0.5, 'vel>fm_ab': -0.4 }; k.home = null; }); await p.click('#alter-key'); await p.waitForTimeout(150); const d1 = await dim();
+    const m1 = await M(() => ({ ...metamorf.keys()[metamorf.cur()].m })), cur = await M(() => metamorf.cur());
+    const r = await M(() => metamorf.render(metamorf.cur(), 0.3).then((x) => x.peak, (e) => String(e)));
+    await p.waitForTimeout(500); await p.reload(); await p.waitForFunction(() => window.metamorfReady); const m2 = await M((i) => metamorf.keys()[i].m, cur);
+    if (J(d0) !== J([true, true]) || J(d1) !== J([false, true]) || !(m1['env>cutoff'] > 0) || !(m1['vel>fm_ab'] < 0) || Object.keys(m1).length !== 2 || J(m2) !== J(m1) || !(r > 0.001))
+      bad('modulation routes', d0, d1, m1, m2, r);
+    await p.click('#start-btn'); await p.waitForTimeout(300); }
   await M(() => metamorf.noteOn(1, 48, 100));
   await p.screenshot({ path: `${out}/screen-${w}x${h}.png` });
   // the menus open on screen, inside the window

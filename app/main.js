@@ -2,17 +2,17 @@
 // knobs edit the key played last. The sound engine is in engine/ and sound/ (no UI there); the controls, colours and
 // phone view are in this folder.
 import { PARAMS, BY_ID, SECTIONS, BASE, OUT_DEFAULT, TYPES, KEYS, MAX_ENGINES, DEFAULT_ENGINES, DEFAULT_LOW, isBip, showValue, fullParams, clampN,
-  levelText, panText, sendText, panRange, engineOf, zoneOf } from '../sound/params.js?v=mwm889or';
-import { free, recipe, alter, pickTables, RECIPE_TYPES } from '../sound/makers.js?v=mwm889or';
-import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm889or';
-import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm889or';
-import { presetName } from './names.js?v=mwm889or';
-import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm889or';
-import { setupColours } from './colours.js?v=mwm889or';
-import { setupPhone } from './phone.js?v=mwm889or';
-import { render as renderOffline } from './offline.js?v=mwm889or';
-import * as WT from './wavetables.js?v=mwm889or';
-import { decodeWav, autoSize, SIZES } from './wav.js?v=mwm889or';
+  levelText, panText, sendText, panRange, engineOf, zoneOf, validRoute } from '../sound/params.js?v=mwm8ivhg';
+import { free, recipe, alter, pickTables, pickRoutes, alterRoutes, RECIPE_TYPES } from '../sound/makers.js?v=mwm8ivhg';
+import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm8ivhg';
+import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm8ivhg';
+import { presetName } from './names.js?v=mwm8ivhg';
+import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm8ivhg';
+import { setupColours } from './colours.js?v=mwm8ivhg';
+import { setupPhone } from './phone.js?v=mwm8ivhg';
+import { render as renderOffline } from './offline.js?v=mwm8ivhg';
+import * as WT from './wavetables.js?v=mwm8ivhg';
+import { decodeWav, autoSize, SIZES } from './wav.js?v=mwm8ivhg';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2); // C3 = 60
@@ -27,7 +27,9 @@ const TYPE_IDS = TYPES.map((t) => t[0]);
 // before it was changed by hand), its home (what ALTER varies around), its lock, and its output (out: level, pan,
 // send, trim: part of the mix, not of the sound), and its oscillators' tables (t: a and b, by id)
 const baseTables = () => ({ a: WT.DEFAULT_TABLE, b: WT.DEFAULT_TABLE });
-const blankKey = () => ({ p: { ...BASE }, t: baseTables(), name: '', type: '', from: 'base', o: {}, home: null, lock: false, out: { ...OUT_DEFAULT } });
+const blankKey = () => ({ p: { ...BASE }, t: baseTables(), m: {}, name: '', type: '', from: 'base', o: {}, home: null, lock: false, out: { ...OUT_DEFAULT } });
+// its modulation routes (m: { 'env>cutoff': amount, ... }, only the routes that make sense, amounts -1..1, none at 0)
+const tidyM = (m) => { const o = {}; if (m && typeof m === 'object') for (const key in m) { const v = Number(m[key]); if (validRoute(key) && Number.isFinite(v) && v) o[key] = clamp(v, -1, 1); } return o; };
 const tidyT = (t) => ({ a: WT.validId(t?.a) ? t.a : WT.DEFAULT_TABLE, b: WT.validId(t?.b) ? t.b : WT.DEFAULT_TABLE });
 const S = {
   keys: Array.from({ length: KEYS }, blankKey),
@@ -49,7 +51,7 @@ function tidyKey(k) {
   if (!k || typeof k !== 'object') return blankKey();
   const o = {}; if (k.o && typeof k.o === 'object') for (const id in k.o) if (BY_ID[id] && typeof k.o[id] === 'number') o[id] = clampN(BY_ID[id], k.o[id]);
   const out = k.out || {};
-  return { p: fullParams(k.p), t: tidyT(k.t), name: cleanName(k.name), type: TYPE_IDS.includes(k.type) ? k.type : '', from: cleanLabel(k.from) || 'base', o,
+  return { p: fullParams(k.p), t: tidyT(k.t), m: tidyM(k.m), homeM: k.home && k.homeM ? tidyM(k.homeM) : null, name: cleanName(k.name), type: TYPE_IDS.includes(k.type) ? k.type : '', from: cleanLabel(k.from) || 'base', o,
     home: k.home && typeof k.home === 'object' ? fullParams(k.home) : null, lock: !!k.lock,
     out: { level: num(out.level, 0, 1, OUT_DEFAULT.level), pan: num(out.pan, -1, 1, 0), send: num(out.send, 0, 1, 0), trim: num(out.trim, -16, 12, 0) } };
 }
@@ -101,7 +103,7 @@ const send = (m) => { if (node) node.port.postMessage(m); };
 async function startAudio() {
   if (ctx) { if (ctx.state !== 'running') await ctx.resume(); return; }
   ctx = new AudioContext({ latencyHint: 'interactive' });
-  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm889or', import.meta.url));
+  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm8ivhg', import.meta.url));
   node = new AudioWorkletNode(ctx, 'metamorf', { numberOfInputs: 0, outputChannelCount: [2] });
   WT.attach((m) => send(m), () => drawKnobs());
   node.port.onmessage = (e) => { if (e.data.type === 'peaks') { heard = Math.max(heard, ...e.data.peaks); showPeaks(e.data.peaks); showSc(e.data.sc || 0); } };
@@ -114,7 +116,7 @@ async function startAudio() {
 // every table the keys name, to the audio thread (each once; until one arrives its notes play BASIC)
 const sendTables = () => WT.ensure(S.keys.flatMap((k) => [k.t.a, k.t.b]));
 // a key's sound as the engine takes it: its parameters, and its tables by id
-const sound = (k) => ({ ...k.p, $a: k.t.a, $b: k.t.b });
+const sound = (k) => ({ ...k.p, $a: k.t.a, $b: k.t.b, $m: k.m });
 const sendFx = () => { send({ type: 'fx', fx: S.fx }); save(); };
 const sendEngineGains = () => send({ type: 'egain', gains: [0, 1, 2, 3].map(engineGain) });
 // what each engine is playing (its key's place), so a change to that key reaches the note still ringing
@@ -178,7 +180,7 @@ function editParam(id, v) {
   snapshot(`${keyName(S.cur)} ${BY_ID[id].sec.toUpperCase()} ${BY_ID[id].label.toUpperCase()}`, `p/${S.cur}/${id}`);
   if (!(id in k.o)) k.o[id] = k.p[id];
   k.p[id] = v; if (k.o[id] === v) delete k.o[id];
-  k.home = null;
+  k.home = null; k.homeM = null;
   touch(S.cur); save(); drawStrip(); drawKeyHead();
 }
 function editOut(f, v) {
@@ -325,11 +327,13 @@ $('fx-tab').addEventListener('click', () => { S.view = S.view === 'fx' ? 'synth'
 // ---------------------------------------------------------------------------------------------------------------
 const GRID_COLS = 13, GRID_ROWS = 4;
 // (as docs/SPEC.md lays out the whole voice: MOD ENV and LFO join in build steps 6 and 7)
-const ROWS = [['osc a', 'osc b', 'fm'], ['noise', 'click', 'pitch env', 'drive'], ['amp', 'filter 1'], ['filter 2', 'output']];
+const ROWS = [['osc a', 'osc b', 'fm'], ['noise', 'click', 'pitch env', 'drive'], ['amp', 'mod env', 'filter 1'], ['filter 2', 'lfo', 'output']];
 // a part at zero is greyed (its knobs still turn); FM is off when both its amounts are
 const PART_GATE = { 'osc a': ['a_level'], 'osc b': ['b_level'], fm: ['fm_ab', 'fm_ba'], noise: ['n_level'], click: ['c_level'], 'pitch env': ['p_amt'], drive: ['drive'], 'filter 2': ['f2_mix'] };
 // a knob drawn dim while another is at zero: VOWEL while FILTER 2 is all comb
-const KNOB_DIM = { f2_vowel: 'f2_blend' };
+const KNOB_DIM = { f2_vowel: 'f2_blend', spacing: 'repeat' };
+// MOD ENV and the LFO: dim while the key has no route from them (the routes are set in the modulation popup, build step 7)
+const SRC_GATE = { 'mod env': 'env', lfo: 'lfo' };
 let knobDraws = [];
 const drawKnobs = () => knobDraws.forEach((d) => d());
 const locked = (e, id) => S.locks[e].includes(id);
@@ -397,6 +401,7 @@ function buildKnobs() {
         const k = sec === 'output' ? outKnob(p) : p === 'table' ? tableKnob(tbl) : paramKnob(p); el.querySelector('.row').append(k.el); knobDraws.push(k.draw);
         const dim = KNOB_DIM[p.id]; if (dim) { const d = () => k.el.classList.toggle('off', !K().p[dim]); gateDraws.push(d); knobDraws.push(d); }
       }
+      const sg = SRC_GATE[sec]; if (sg) { const d = () => el.classList.toggle('off', !Object.keys(K().m).some((key) => key.startsWith(sg + '>'))); gateDraws.push(d); knobDraws.push(d); }
       const g = PART_GATE[sec]; if (g) { const d = () => el.classList.toggle('off', g.every((id) => !K().p[id])); gateDraws.push(d); knobDraws.push(d); }
     }
     if (col <= GRID_COLS) sect(GRID_COLS + 1 - col, ' fill');
@@ -472,7 +477,7 @@ $('lock-key').addEventListener('click', lockKey);
 $('alter-key').addEventListener('click', () => alterKey());
 let clip = null;
 function copyKey() {
-  const k = K(); clip = structuredClone({ p: k.p, t: k.t, name: k.name, type: k.type, from: k.from });
+  const k = K(); clip = structuredClone({ p: k.p, t: k.t, m: k.m, name: k.name, type: k.type, from: k.from });
   $('paste-key').disabled = K().lock; $('paste-key').title = `Paste ${clip.name || 'the base sound'} onto this key (Cmd+V / Ctrl+V)`;
   detail(`copied <em>${keyName(S.cur)}</em> · pick a key and paste (Cmd+V / Ctrl+V)`);
 }
@@ -480,13 +485,13 @@ function pasteKey() {
   if (!clip) { detail('nothing copied yet: COPY (Cmd+C / Ctrl+C) a key first'); return; }
   if (K().lock) { lockedMsg(); return; }
   const place = S.cur;
-  change(`PASTE ${keyName(place)}`, () => { const k = S.keys[place]; Object.assign(k, structuredClone(clip), { o: {}, home: null }); },
+  change(`PASTE ${keyName(place)}`, () => { const k = S.keys[place]; Object.assign(k, structuredClone(clip), { o: {}, home: null, homeM: null }); },
     `pasted <em>${clip.name || 'the base sound'}</em> onto ${keyName(place)} · UNDO takes it back`, place);
 }
 function clearKey() {
   if (K().lock) { lockedMsg(); return; }
   const place = S.cur;
-  change(`CLEAR ${keyName(place)}`, () => { Object.assign(S.keys[place], { p: { ...BASE }, t: baseTables(), name: '', type: '', from: 'base', o: {}, home: null }); }, `${keyName(place)}: back to the base sound`, place);
+  change(`CLEAR ${keyName(place)}`, () => { Object.assign(S.keys[place], { p: { ...BASE }, t: baseTables(), m: {}, name: '', type: '', from: 'base', o: {}, home: null, homeM: null }); }, `${keyName(place)}: back to the base sound`, place);
 }
 $('copy-key').addEventListener('click', copyKey);
 $('paste-key').addEventListener('click', pasteKey);
@@ -531,14 +536,14 @@ for (const b of document.querySelectorAll('.srcrow .btn')) b.addEventListener('c
 function newSound(type) {
   const src = type ? 'recipe' : source(), t = type || (src === 'recipe' ? RECIPE_TYPES[Math.floor(rnd() * RECIPE_TYPES.length)] : '');
   const p = t ? recipe(rnd, t) : free(rnd);
-  return { p, t: pickTables(rnd, t, p), name: presetName(rnd), type: t, from: t ? 'recipe' : 'free' };
+  return { p, t: pickTables(rnd, t, p), m: pickRoutes(rnd, t), name: presetName(rnd), type: t, from: t ? 'recipe' : 'free' };
 }
 // a new sound onto a key: its locked knobs keep what the key had, its send stays, its pan follows the type
 function deal(place, s) {
   const k = S.keys[place], e = engOf(place), keep = S.locks[e];
   const p = { ...s.p }; for (const id of keep) if (BY_ID[id]) p[id] = k.p[id];
   const t = { a: keep.includes('tbl.a') ? k.t.a : s.t.a, b: keep.includes('tbl.b') ? k.t.b : s.t.b };
-  Object.assign(k, { p, t, name: s.name, type: s.type, from: s.from, o: {}, home: null });
+  Object.assign(k, { p, t, m: { ...s.m }, name: s.name, type: s.type, from: s.from, o: {}, home: null, homeM: null });
   if (!keep.includes('out.pan')) { const r = panRange(s.type); k.out.pan = Math.round((rnd() * 2 - 1) * r * 100) / 100; }
 }
 const keptNote = (engines) => {
@@ -565,8 +570,9 @@ function scatter(e) { for (const place of placesOf(e)) if (!S.keys[place].lock) 
 // HOW MUCH, inside its safe range (WILD: anywhere), so repeated presses vary one sound instead of drifting away
 function alterOne(place) {
   const k = S.keys[place]; if (k.lock) return;
-  if (!k.home) k.home = { ...k.p };
+  if (!k.home) { k.home = { ...k.p }; k.homeM = { ...k.m }; }
   const keep = S.locks[engOf(place)];
+  k.m = alterRoutes(rnd, k.homeM || k.m, S.rand.alter / 100, S.rand.wild);
   k.p = alter(rnd, k.home, S.rand.alter / 100, S.rand.wild, (id) => keep.includes(id)); k.o = {};
   for (const id of keep) if (BY_ID[id]) k.p[id] = k.home[id];
 }

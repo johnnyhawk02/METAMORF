@@ -24,6 +24,7 @@ const between = (names, x) => { const n = names.length - 1, f = x * n, i = Math.
 const morphText = (x) => between(['LP', 'BP', 'HP'], x);
 const vowelText = (x) => between(['A', 'E', 'I', 'O', 'U'], x);
 const blendText = (x) => (x < 0.03 ? 'COMB' : x > 0.97 ? 'VOWEL' : `C${Math.round((1 - x) * 100)}/V${Math.round(x * 100)}`);
+const repeatText = (r) => (r < 0.005 ? 'OFF' : Math.abs(r - Math.round(r)) < 0.005 ? '×' + Math.round(r) : '×' + Math.floor(r) + '+' + Math.round((r - Math.floor(r)) * 100) + '%');
 const signed = (x, d = 0) => (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toFixed(d);
 
 // the curves, normalised value -> real units
@@ -84,7 +85,28 @@ export const PARAMS = [
   { id: 'p_amt', label: 'amount', sec: 'pitch env', map: 'bip', lo: -48, hi: 96, def: 0.15, safe: [-0.1, 0.6], show: (s) => signed(s, Math.abs(s) < 10 ? 1 : 0) + 'st', gate: true, dep: ['p_decay', 'p_curve'] },
   { id: 'p_decay', label: 'decay', sec: 'pitch env', map: 'log', lo: 1, hi: 2000, def: 0.35, safe: [0.1, 0.7], show: fmtMs },
   { id: 'p_curve', label: 'curve', sec: 'pitch env', map: 'bip', lo: -1, hi: 1, def: 0.5, safe: [-0.5, 1], show: (c) => signed(c * 100) },
+  // REPEAT (in AMP): the envelopes start again SPACING apart; the whole part counts, the fraction is the last one's level
+  { id: 'repeat', label: 'repeat', sec: 'amp', map: 'lin', lo: 0, hi: 8, def: 0, safe: [0, 0], show: repeatText },
+  { id: 'spacing', label: 'spacing', sec: 'amp', map: 'log', lo: 1, hi: 80, def: Math.log(10) / Math.log(80), safe: [0.3, 0.8], show: fmtMs },
+  // MOD ENV and the LFO: sources only, heard through the routes ($m)
+  { id: 'me_decay', label: 'decay', sec: 'mod env', map: 'log', lo: 1, hi: 4000, def: 0.6, safe: [0.2, 0.8], show: fmtMs },
+  { id: 'me_curve', label: 'curve', sec: 'mod env', map: 'bip', lo: -1, hi: 1, def: 0.3, safe: [-0.6, 1], show: (c) => signed(c * 100) },
+  { id: 'lfo_rate', label: 'rate', sec: 'lfo', map: 'log', lo: 0.05, hi: 2000, def: Math.log(100) / Math.log(40000), safe: [0.35, 0.8], show: (f) => (f < 10 ? f.toFixed(f < 1 ? 2 : 1) + 'Hz' : hzText(f)) },
+  { id: 'lfo_shape', label: 'shape', sec: 'lfo', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 1], show: (x) => between(['SINE', 'TRI', 'SAW', 'SQR', 'RAND'], x) },
 ];
+// ---- modulation: three sources, each to the destinations where it makes sense (the routes a sound may hold) ----
+export const MOD_SOURCES = ['env', 'lfo', 'vel'];
+export const MOD_NAMES = { env: 'MOD ENV', lfo: 'LFO', vel: 'VELOCITY' };
+export const MOD_ROUTES = {
+  env: ['fm_ab', 'fm_ba', 'a_pos', 'b_pos', 'cutoff', 'f2_pitch'],
+  lfo: ['a_tune', 'a_pos', 'b_pos', 'cutoff', 'fm_ab', 'fm_ba', 'a_level'],
+  vel: ['decay', 'p_amt', 'cutoff', 'fm_ab', 'fm_ba', 'c_level', 'n_seed'],
+};
+// how far amount 1 moves a destination, in its normalised units (1 unless a full sweep would be too much)
+const DEPTHS = { a_tune: [1, 0.5, 0.5], cutoff: [0.8, 0.4, 0.4], f2_pitch: [0.46, 0.23, 0.23] };
+export const modDepth = (s, id) => (DEPTHS[id] ? DEPTHS[id][typeof s === 'number' ? s : MOD_SOURCES.indexOf(s)] : 1);
+export const routeKey = (s, id) => s + '>' + id;
+export const validRoute = (key) => { const [s, id] = String(key).split('>'); return !!MOD_ROUTES[s] && MOD_ROUTES[s].includes(id); };
 export const BY_ID = Object.fromEntries(PARAMS.map((p) => [p.id, p]));
 export const SECTIONS = [...new Set(PARAMS.map((p) => p.sec))];
 export const isBip = (p) => p.map === 'bip';
