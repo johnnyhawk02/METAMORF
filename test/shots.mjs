@@ -172,10 +172,10 @@ for (const [w, h] of [[1440, 900], [1280, 800], [1440, 760], [1280, 700]]) {
     const lay2 = await M(() => [document.documentElement.scrollWidth - innerWidth, document.documentElement.scrollHeight - innerHeight]); if (lay2[0] > 0 || lay2[1] > 0) bad('the FX tab scrolls', lay2); }
   if (w === 1440 && h === 900 || w === 1280 && h === 700) await p.screenshot({ path: `${out}/fx-${w}x${h}.png` });
   await p.keyboard.press('f');
-  // ---- a CC from the Bass Station 2 map turns the key's knob; one for a part not built yet says so ----
+  // ---- a CC from the Bass Station 2 map turns the key's knob (DECAY, and the filter's CUTOFF) ----
   { await M(() => { metamorf.noteOn(1, 55, 100); metamorf.cc(91, 127); }); const s = await M(() => [metamorf.keys()[7].p.decay, document.getElementById('last-text').textContent]);
     await M(() => metamorf.cc(16, 20)); const t = await M(() => document.getElementById('last-text').textContent);
-    if (s[0] !== 1 || !/DECAY/.test(s[1]) || !/waits for the filter/i.test(t)) bad('CC', s, t); }
+    if (s[0] !== 1 || !/DECAY/.test(s[1]) || !/CUTOFF/.test(t)) bad('CC', s, t); }
   await M(() => metamorf.noteOn(1, 48, 100));
   await p.screenshot({ path: `${out}/screen-${w}x${h}.png` });
   // the menus open on screen, inside the window

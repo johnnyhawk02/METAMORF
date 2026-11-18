@@ -2,17 +2,17 @@
 // knobs edit the key played last. The sound engine is in engine/ and sound/ (no UI there); the controls, colours and
 // phone view are in this folder.
 import { PARAMS, BY_ID, SECTIONS, BASE, OUT_DEFAULT, TYPES, KEYS, MAX_ENGINES, DEFAULT_ENGINES, DEFAULT_LOW, isBip, showValue, fullParams, clampN,
-  levelText, panText, sendText, panRange, engineOf, zoneOf } from '../sound/params.js?v=mwm7rfj6';
-import { free, recipe, alter, pickTables, RECIPE_TYPES } from '../sound/makers.js?v=mwm7rfj6';
-import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm7rfj6';
-import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm7rfj6';
-import { presetName } from './names.js?v=mwm7rfj6';
-import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm7rfj6';
-import { setupColours } from './colours.js?v=mwm7rfj6';
-import { setupPhone } from './phone.js?v=mwm7rfj6';
-import { render as renderOffline } from './offline.js?v=mwm7rfj6';
-import * as WT from './wavetables.js?v=mwm7rfj6';
-import { decodeWav, autoSize, SIZES } from './wav.js?v=mwm7rfj6';
+  levelText, panText, sendText, panRange, engineOf, zoneOf } from '../sound/params.js?v=mwm889or';
+import { free, recipe, alter, pickTables, RECIPE_TYPES } from '../sound/makers.js?v=mwm889or';
+import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm889or';
+import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm889or';
+import { presetName } from './names.js?v=mwm889or';
+import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm889or';
+import { setupColours } from './colours.js?v=mwm889or';
+import { setupPhone } from './phone.js?v=mwm889or';
+import { render as renderOffline } from './offline.js?v=mwm889or';
+import * as WT from './wavetables.js?v=mwm889or';
+import { decodeWav, autoSize, SIZES } from './wav.js?v=mwm889or';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2); // C3 = 60
@@ -101,7 +101,7 @@ const send = (m) => { if (node) node.port.postMessage(m); };
 async function startAudio() {
   if (ctx) { if (ctx.state !== 'running') await ctx.resume(); return; }
   ctx = new AudioContext({ latencyHint: 'interactive' });
-  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm7rfj6', import.meta.url));
+  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm889or', import.meta.url));
   node = new AudioWorkletNode(ctx, 'metamorf', { numberOfInputs: 0, outputChannelCount: [2] });
   WT.attach((m) => send(m), () => drawKnobs());
   node.port.onmessage = (e) => { if (e.data.type === 'peaks') { heard = Math.max(heard, ...e.data.peaks); showPeaks(e.data.peaks); showSc(e.data.sc || 0); } };
@@ -324,10 +324,12 @@ $('fx-tab').addEventListener('click', () => { S.view = S.view === 'fx' ? 'synth'
 // LEVEL under it. Rules sit on cell edges
 // ---------------------------------------------------------------------------------------------------------------
 const GRID_COLS = 13, GRID_ROWS = 4;
-// (as docs/SPEC.md lays out the whole voice: FILTER 1, MOD ENV, FILTER 2 and LFO join in build steps 5 to 7)
-const ROWS = [['osc a', 'osc b', 'fm'], ['noise', 'click', 'pitch env', 'drive'], ['amp'], ['output']];
+// (as docs/SPEC.md lays out the whole voice: MOD ENV and LFO join in build steps 6 and 7)
+const ROWS = [['osc a', 'osc b', 'fm'], ['noise', 'click', 'pitch env', 'drive'], ['amp', 'filter 1'], ['filter 2', 'output']];
 // a part at zero is greyed (its knobs still turn); FM is off when both its amounts are
-const PART_GATE = { 'osc a': ['a_level'], 'osc b': ['b_level'], fm: ['fm_ab', 'fm_ba'], noise: ['n_level'], click: ['c_level'], 'pitch env': ['p_amt'], drive: ['drive'] };
+const PART_GATE = { 'osc a': ['a_level'], 'osc b': ['b_level'], fm: ['fm_ab', 'fm_ba'], noise: ['n_level'], click: ['c_level'], 'pitch env': ['p_amt'], drive: ['drive'], 'filter 2': ['f2_mix'] };
+// a knob drawn dim while another is at zero: VOWEL while FILTER 2 is all comb
+const KNOB_DIM = { f2_vowel: 'f2_blend' };
 let knobDraws = [];
 const drawKnobs = () => knobDraws.forEach((d) => d());
 const locked = (e, id) => S.locks[e].includes(id);
@@ -391,7 +393,10 @@ function buildKnobs() {
       const list = sec === 'output' ? ['pan'] : [...(tbl ? ['table'] : []), ...PARAMS.filter((p) => p.sec === sec)];
       const el = sect(list.length);
       el.innerHTML = `<h3>${sec}</h3><div class="row"></div>`;
-      for (const p of list) { const k = sec === 'output' ? outKnob(p) : p === 'table' ? tableKnob(tbl) : paramKnob(p); el.querySelector('.row').append(k.el); knobDraws.push(k.draw); }
+      for (const p of list) {
+        const k = sec === 'output' ? outKnob(p) : p === 'table' ? tableKnob(tbl) : paramKnob(p); el.querySelector('.row').append(k.el); knobDraws.push(k.draw);
+        const dim = KNOB_DIM[p.id]; if (dim) { const d = () => k.el.classList.toggle('off', !K().p[dim]); gateDraws.push(d); knobDraws.push(d); }
+      }
       const g = PART_GATE[sec]; if (g) { const d = () => el.classList.toggle('off', g.every((id) => !K().p[id])); gateDraws.push(d); knobDraws.push(d); }
     }
     if (col <= GRID_COLS) sect(GRID_COLS + 1 - col, ' fill');

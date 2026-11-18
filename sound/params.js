@@ -19,6 +19,11 @@ const colourText = (c) => (Math.abs(c) < 0.03 ? 'WHITE' : (c < 0 ? 'DARK ' : 'BR
 const CLICKS = ['PULSE', 'CHIRP', 'BURST'];
 const clickShapeText = (x) => { const f = x * 2, i = Math.min(1, Math.floor(f)), t = f - i; return t < 0.05 ? CLICKS[i] : t > 0.95 ? CLICKS[i + 1] : `${CLICKS[i].slice(0, 3)}>${CLICKS[i + 1].slice(0, 3)} ${Math.round(t * 100)}`; };
 const hzText = (f) => (f < 1000 ? Math.round(f) + 'Hz' : (f / 1000).toFixed(f < 9950 ? 1 : 0) + 'k');
+// FILTER 1 MORPH, FILTER 2 COMB > VOWEL and VOWEL: soft labels between their points
+const between = (names, x) => { const n = names.length - 1, f = x * n, i = Math.min(n - 1, Math.floor(f)), t = f - i; return t < 0.05 ? names[i] : t > 0.95 ? names[i + 1] : `${names[i]}>${names[i + 1]} ${Math.round(t * 100)}`; };
+const morphText = (x) => between(['LP', 'BP', 'HP'], x);
+const vowelText = (x) => between(['A', 'E', 'I', 'O', 'U'], x);
+const blendText = (x) => (x < 0.03 ? 'COMB' : x > 0.97 ? 'VOWEL' : `C${Math.round((1 - x) * 100)}/V${Math.round(x * 100)}`);
 const signed = (x, d = 0) => (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toFixed(d);
 
 // the curves, normalised value -> real units
@@ -57,6 +62,19 @@ export const PARAMS = [
   { id: 'c_direct', label: 'direct', sec: 'click', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 1], show: (x) => Math.round(x * 100) + '%' },
   // DRIVE: before the filters
   { id: 'drive', label: 'amount', sec: 'drive', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 0.6], show: (x) => Math.round(x * 100) + '%', gate: true },
+  // FILTER 1: the morph filter (LP > BP > HP), after DRIVE
+  { id: 'f_morph', label: 'morph', sec: 'filter 1', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 1], show: morphText },
+  { id: 'cutoff', label: 'cutoff', sec: 'filter 1', map: 'log', lo: 20, hi: 20000, def: 1, safe: [0.35, 1], show: hzText },
+  { id: 'reso', label: 'resonance', sec: 'filter 1', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 0.7], show: (x) => Math.round(x * 100) + '%' },
+  { id: 'f_track', label: 'track', sec: 'filter 1', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 1], show: (x) => Math.round(x * 100) + '%' },
+  // FILTER 2: the comb and the vowel filter, blended (MIX: how much of it)
+  { id: 'f2_mix', label: 'mix', sec: 'filter 2', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 0.8], show: (x) => Math.round(x * 100) + '%', gate: true, dep: ['f2_blend', 'f2_pitch', 'f2_track', 'f2_res', 'f2_damp', 'f2_vowel'] },
+  { id: 'f2_blend', label: 'comb>vowel', sec: 'filter 2', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 1], show: blendText },
+  { id: 'f2_pitch', label: 'pitch', sec: 'filter 2', map: 'log', lo: 20, hi: 8000, def: Math.log(10) / Math.log(400), safe: [0.2, 0.9], show: hzText },
+  { id: 'f2_track', label: 'track', sec: 'filter 2', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 1], show: (x) => Math.round(x * 100) + '%' },
+  { id: 'f2_res', label: 'resonance', sec: 'filter 2', map: 'bip', lo: -0.98, hi: 0.98, def: 0.6, safe: [-0.9, 0.95], show: (x) => signed(x * 100) },
+  { id: 'f2_damp', label: 'damp', sec: 'filter 2', map: 'lin', lo: 0, hi: 1, def: 0.3, safe: [0, 1], show: (x) => Math.round(x * 100) + '%' },
+  { id: 'f2_vowel', label: 'vowel', sec: 'filter 2', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 1], show: vowelText },
   // AMP
   { id: 'attack', label: 'attack', sec: 'amp', map: 'cube', lo: 0, hi: 200, def: 0, safe: [0, 0.35], show: fmtMs },
   { id: 'hold', label: 'hold', sec: 'amp', map: 'cube', lo: 0, hi: 500, def: 0, safe: [0, 0.4], show: fmtMs },

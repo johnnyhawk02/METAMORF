@@ -190,7 +190,7 @@ export function read(t, pos, phase, hz, fs) {
   if (l0 >= LEVELS - 1) { l0 = LEVELS - 1; w = 0; }
   const F = t.frames, fp = Math.min(Math.max(pos, 0), 1) * (F - 1), f0 = F > 1 ? Math.min(fp | 0, F - 2) : 0, ff = F > 1 ? fp - f0 : 0;
   const at = (l) => {
-    const N = t.size[l], d = t.data[l], x = phase * N, i0 = x | 0, o0 = f0 * (N + G) + 2 + i0, o1 = o0 + (F > 1 ? N + G : 0);
+    const N = t.size[l], d = t.data[l], x = phase * N < N ? phase * N : 0, i0 = x | 0, /* (a phase of -1e-17 wrapped is 1.0: read it as 0) */ o0 = f0 * (N + G) + 2 + i0, o1 = o0 + (F > 1 ? N + G : 0);
     weights(x - i0);
     const s0 = lagrange(d, o0), s1 = lagrange(d, o1); return s0 + (s1 - s0) * ff;
   };
