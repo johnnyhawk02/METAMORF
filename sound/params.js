@@ -79,8 +79,8 @@ export const PARAMS = [
   // AMP
   { id: 'attack', label: 'attack', sec: 'amp', map: 'cube', lo: 0, hi: 200, def: 0, safe: [0, 0.35], show: fmtMs },
   { id: 'hold', label: 'hold', sec: 'amp', map: 'cube', lo: 0, hi: 500, def: 0, safe: [0, 0.4], show: fmtMs },
-  { id: 'decay', label: 'decay', sec: 'amp', map: 'log', lo: 5, hi: 8000, def: 0.5, safe: [0.2, 0.75], show: fmtMs },
-  { id: 'curve', label: 'curve', sec: 'amp', map: 'bip', lo: -1, hi: 1, def: 0.3, safe: [-0.6, 1], show: (c) => signed(c * 100) },
+  { id: 'decay', label: 'decay', sec: 'amp', map: 'log', lo: 5, hi: 8000, def: 0.6, safe: [0.4, 0.85], show: fmtMs },
+  { id: 'curve', label: 'curve', sec: 'amp', map: 'bip', lo: -1, hi: 1, def: 0.1, safe: [-0.6, 0.5], show: (c) => signed(c * 100) },
   // PITCH ENV
   { id: 'p_amt', label: 'amount', sec: 'pitch env', map: 'bip', lo: -48, hi: 96, def: 0.15, safe: [-0.1, 0.6], show: (s) => signed(s, Math.abs(s) < 10 ? 1 : 0) + 'st', gate: true, dep: ['p_decay', 'p_curve'] },
   { id: 'p_decay', label: 'decay', sec: 'pitch env', map: 'log', lo: 1, hi: 2000, def: 0.35, safe: [0.1, 0.7], show: fmtMs },

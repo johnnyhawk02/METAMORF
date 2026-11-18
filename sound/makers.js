@@ -3,8 +3,8 @@
 // Build step 1 has the ones that need no kept sounds: FREE (every parameter anywhere in its safe range), the starter
 // recipes (a sound of a named type, hand-tuned ranges for the stub voice) and ALTER (a nudge around a sound's home).
 // LIBRARY, BREED, MORPH, STYLE and the learned recipes come with the library (build steps 10 and 11).
-import { PARAMS, BY_ID, isBip, MOD_ROUTES, MOD_SOURCES, routeKey, validRoute } from './params.js?v=mwm930re';
-import { BUILTIN_IDS } from '../engine/tables.js?v=mwm930re';
+import { PARAMS, BY_ID, isBip, MOD_ROUTES, MOD_SOURCES, routeKey, validRoute } from './params.js?v=mwma0hzc';
+import { BUILTIN_IDS } from '../engine/tables.js?v=mwma0hzc';
 
 const pick = (rnd, [lo, hi]) => lo + rnd() * (hi - lo);
 const lim = (p) => [isBip(p) ? -1 : 0, 1];
@@ -22,19 +22,26 @@ export function free(rnd) {
 // oscillators on BASIC); rewritten for the whole voice in build step 10. POSITION on BASIC: 0 sine, .25 triangle,
 // .5 saw, .75 square, 1 narrow pulse. RATIO: 1/3 is x1, .5 is x2, .6 about x3, .69 about x4.4
 export const STARTERS = {
-  kick: { a_pos: [0, 0.12], a_tune: [-0.55, -0.4], p_amt: [0.25, 0.45], p_decay: [0.18, 0.32], p_curve: [0.4, 0.9], decay: [0.42, 0.58], curve: [0, 0.6], attack: [0, 0.05], hold: [0, 0.2], b_level: [0, 0], c_level: [0.15, 0.5], c_shape: [0, 0.45], c_tone: [0.6, 0.85], c_len: [0.15, 0.45], c_direct: [0.4, 1], drive: [0, 0.35], cutoff: [0.55, 0.85], reso: [0, 0.4], f_morph: [0, 0] },
-  tom: { a_pos: [0, 0.2], a_tune: [-0.4, -0.15], p_amt: [0.06, 0.15], p_decay: [0.3, 0.45], decay: [0.42, 0.55], attack: [0, 0.05], hold: [0, 0.15], b_level: [0, 0.3], b_pos: [0, 0.1], b_ratio: [0.38, 0.45], b_track: [0.7, 1], c_level: [0, 0.25], c_shape: [0, 0.5], drive: [0, 0.25], n_level: [0, 0.12], n_colour: [-0.6, 0], n_decay: [0.3, 0.6], cutoff: [0.6, 0.9], f2_mix: [0, 0.3], f2_blend: [0, 0.2] },
-  perc: { a_pos: [0, 0.45], a_tune: [-0.1, 0.25], p_amt: [0.02, 0.1], p_decay: [0.15, 0.35], decay: [0.3, 0.45], attack: [0, 0.05], hold: [0, 0.1], b_level: [0, 0.5], b_pos: [0, 0.5], b_ratio: [0.4, 0.65], b_track: [0.5, 1], fm_ab: [0, 0.3], c_level: [0, 0.3], c_shape: [0.2, 0.8], f2_mix: [0, 0.5], f2_blend: [0, 0.6], f2_track: [0.5, 1] },
-  zap: { a_pos: [0.25, 0.8], a_tune: [-0.3, 0.1], p_amt: [0.5, 0.9], p_decay: [0.35, 0.55], p_curve: [-0.3, 0.4], decay: [0.35, 0.5], attack: [0, 0.05], hold: [0, 0.1], b_level: [0, 0.6], b_pos: [0.4, 1], b_ratio: [0.33, 0.55], b_det: [-0.3, 0.3], b_track: [0.8, 1], fm_ab: [0, 0.5], fm_ba: [0, 0.3], drive: [0, 0.5], reso: [0.3, 0.7], f_track: [0.5, 1], cutoff: [0.5, 0.85], f_morph: [0, 0.5] },
-  snare: { a_pos: [0.1, 0.3], a_tune: [-0.2, 0], p_amt: [0.08, 0.2], p_decay: [0.15, 0.3], decay: [0.35, 0.5], attack: [0, 0.03], hold: [0, 0.1], b_level: [0.4, 0.8], b_pos: [0.6, 1], b_ratio: [0.45, 0.62], b_track: [0, 0.4], n_level: [0.45, 0.85], n_colour: [-0.1, 0.6], n_decay: [0.55, 0.85], c_level: [0.1, 0.45], c_shape: [0.5, 1], c_tone: [0.65, 0.9], drive: [0, 0.3], f_morph: [0.2, 0.75], cutoff: [0.6, 0.9], reso: [0, 0.35] },
-  clap: { repeat: [0.25, 0.45], spacing: [0.45, 0.62], a_pos: [0.5, 0.9], a_tune: [0, 0.2], p_amt: [0, 0.05], decay: [0.25, 0.38], attack: [0, 0.1], hold: [0, 0.1], b_level: [0.5, 0.9], b_pos: [0.7, 1], b_ratio: [0.5, 0.75], b_det: [-0.6, 0.6], b_track: [0, 0.3], n_level: [0.6, 0.95], n_colour: [-0.2, 0.4], n_decay: [0.6, 0.85], c_level: [0, 0.3], c_shape: [0.8, 1], f_morph: [0.35, 0.65], cutoff: [0.62, 0.82], reso: [0.1, 0.45] },
-  rim: { a_pos: [0.2, 0.6], a_tune: [0.15, 0.35], p_amt: [0.02, 0.08], p_decay: [0.05, 0.2], decay: [0.15, 0.28], attack: [0, 0.02], hold: [0, 0.05], b_level: [0.3, 0.7], b_pos: [0.5, 0.9], b_ratio: [0.55, 0.72], b_track: [0, 0.5], c_level: [0.35, 0.75], c_shape: [0.3, 0.7], c_tone: [0.75, 0.95], c_len: [0.1, 0.4], fm_ab: [0, 0.3], f2_mix: [0, 0.4], f2_blend: [0, 0.3], f2_track: [0.5, 1] },
-  bell: { a_pos: [0, 0.2], a_tune: [0.2, 0.5], p_amt: [-0.02, 0.02], decay: [0.55, 0.7], curve: [-0.3, 0.3], attack: [0, 0.03], hold: [0, 0.1], b_level: [0.4, 0.8], b_pos: [0, 0.25], b_ratio: [0.55, 0.8], b_det: [-0.2, 0.2], b_track: [0, 0.2], fm_ab: [0.1, 0.45], f2_mix: [0, 0.4], f2_blend: [0, 0.4], f2_track: [0.7, 1] },
-  'closed hat': { a_pos: [0.8, 1], a_tune: [0.6, 0.8], p_amt: [0, 0.03], decay: [0.12, 0.25], curve: [0.5, 1], attack: [0, 0.02], hold: [0, 0.05], b_level: [0.6, 0.9], b_pos: [0.75, 1], b_ratio: [0.62, 0.9], b_det: [-0.8, 0.8], b_track: [0, 0.1], n_level: [0.5, 0.9], n_colour: [0.5, 1], n_decay: [0.5, 0.8], fm_ab: [0.2, 0.6], fm_ba: [0, 0.35], f_morph: [0.75, 1], cutoff: [0.75, 0.95], reso: [0, 0.4] },
-  'open hat': { a_pos: [0.8, 1], a_tune: [0.6, 0.8], p_amt: [0, 0.03], decay: [0.35, 0.5], attack: [0, 0.03], hold: [0, 0.1], b_level: [0.6, 0.9], b_pos: [0.75, 1], b_ratio: [0.62, 0.9], b_det: [-0.8, 0.8], b_track: [0, 0.1], n_level: [0.5, 0.9], n_colour: [0.5, 1], n_decay: [0.6, 0.85], fm_ab: [0.2, 0.6], fm_ba: [0, 0.35], f_morph: [0.7, 1], cutoff: [0.72, 0.92], reso: [0, 0.4] },
-  cymbal: { a_pos: [0.7, 1], a_tune: [0.55, 0.75], p_amt: [0, 0.03], decay: [0.55, 0.72], attack: [0, 0.03], hold: [0, 0.1], b_level: [0.6, 0.9], b_pos: [0.7, 1], b_ratio: [0.65, 0.95], b_det: [-1, 1], b_track: [0, 0.1], n_level: [0.35, 0.75], n_colour: [0.3, 0.9], n_decay: [0.65, 0.9], fm_ab: [0.3, 0.7], fm_ba: [0.1, 0.45], f_morph: [0.6, 1], cutoff: [0.7, 0.9], reso: [0, 0.3] },
+  kick: { a_pos: [0, 0.1], a_tune: [-0.5, -0.36], p_amt: [0.3, 0.5], p_decay: [0.45, 0.62], p_curve: [0.25, 0.75], decay: [0.53, 0.66], curve: [-0.3, 0.3], attack: [0, 0.04], hold: [0, 0.35], b_level: [0, 0], c_level: [0.15, 0.45], c_shape: [0, 0.4], c_tone: [0.6, 0.85], c_len: [0.15, 0.4], c_direct: [0.5, 1], drive: [0.3, 0.6], cutoff: [0.65, 0.95], reso: [0, 0.2], f_track: [0, 0.3], f_morph: [0, 0] },
+  tom: { a_pos: [0, 0.2], a_tune: [-0.4, -0.15], p_amt: [0.06, 0.15], p_decay: [0.3, 0.45], decay: [0.5, 0.65], attack: [0, 0.05], hold: [0, 0.15], b_level: [0, 0.3], b_pos: [0, 0.1], b_ratio: [0.38, 0.45], b_track: [0.7, 1], c_level: [0, 0.25], c_shape: [0, 0.5], drive: [0, 0.25], n_level: [0, 0.12], n_colour: [-0.6, 0], n_decay: [0.3, 0.6], cutoff: [0.6, 0.9], f2_mix: [0, 0.3], f2_blend: [0, 0.2] },
+  perc: { a_pos: [0, 0.45], a_tune: [-0.1, 0.25], p_amt: [0.02, 0.1], p_decay: [0.15, 0.35], decay: [0.4, 0.58], attack: [0, 0.05], hold: [0, 0.1], b_level: [0, 0.5], b_pos: [0, 0.5], b_ratio: [0.4, 0.65], b_track: [0.5, 1], fm_ab: [0, 0.3], c_level: [0, 0.3], c_shape: [0.2, 0.8], f2_mix: [0, 0.5], f2_blend: [0, 0.6], f2_track: [0.5, 1] },
+  zap: { a_pos: [0.25, 0.8], a_tune: [-0.3, 0.1], p_amt: [0.5, 0.9], p_decay: [0.35, 0.55], p_curve: [-0.3, 0.4], decay: [0.42, 0.6], attack: [0, 0.05], hold: [0, 0.1], b_level: [0, 0.6], b_pos: [0.4, 1], b_ratio: [0.33, 0.55], b_det: [-0.3, 0.3], b_track: [0.8, 1], fm_ab: [0, 0.5], fm_ba: [0, 0.3], drive: [0, 0.5], reso: [0.3, 0.7], f_track: [0.5, 1], cutoff: [0.5, 0.85], f_morph: [0, 0.5] },
+  snare: { a_pos: [0.1, 0.3], a_tune: [-0.2, 0], p_amt: [0.08, 0.2], p_decay: [0.15, 0.3], decay: [0.45, 0.6], attack: [0, 0.03], hold: [0, 0.1], b_level: [0.4, 0.8], b_pos: [0.6, 1], b_ratio: [0.45, 0.62], b_track: [0, 0.4], n_level: [0.45, 0.85], n_colour: [-0.1, 0.6], n_decay: [0.55, 0.85], c_level: [0.1, 0.45], c_shape: [0.5, 1], c_tone: [0.65, 0.9], drive: [0, 0.3], f_morph: [0.2, 0.75], cutoff: [0.6, 0.9], reso: [0, 0.35] },
+  clap: { repeat: [0.25, 0.45], spacing: [0.45, 0.62], a_pos: [0.5, 0.9], a_tune: [0, 0.2], p_amt: [0, 0.05], decay: [0.38, 0.52], attack: [0, 0.1], hold: [0, 0.1], b_level: [0.5, 0.9], b_pos: [0.7, 1], b_ratio: [0.5, 0.75], b_det: [-0.6, 0.6], b_track: [0, 0.3], n_level: [0.6, 0.95], n_colour: [-0.2, 0.4], n_decay: [0.6, 0.85], c_level: [0, 0.3], c_shape: [0.8, 1], f_morph: [0.35, 0.65], cutoff: [0.62, 0.82], reso: [0.1, 0.45] },
+  rim: { a_pos: [0.2, 0.6], a_tune: [0.15, 0.35], p_amt: [0.02, 0.08], p_decay: [0.05, 0.2], decay: [0.25, 0.4], attack: [0, 0.02], hold: [0, 0.05], b_level: [0.3, 0.7], b_pos: [0.5, 0.9], b_ratio: [0.55, 0.72], b_track: [0, 0.5], c_level: [0.35, 0.75], c_shape: [0.3, 0.7], c_tone: [0.75, 0.95], c_len: [0.1, 0.4], fm_ab: [0, 0.3], f2_mix: [0, 0.4], f2_blend: [0, 0.3], f2_track: [0.5, 1] },
+  bell: { a_pos: [0, 0.2], a_tune: [0.2, 0.5], p_amt: [-0.02, 0.02], decay: [0.62, 0.78], curve: [-0.3, 0.3], attack: [0, 0.03], hold: [0, 0.1], b_level: [0.4, 0.8], b_pos: [0, 0.25], b_ratio: [0.55, 0.8], b_det: [-0.2, 0.2], b_track: [0, 0.2], fm_ab: [0.1, 0.45], f2_mix: [0, 0.4], f2_blend: [0, 0.4], f2_track: [0.7, 1] },
+  'closed hat': { a_pos: [0.8, 1], a_tune: [0.6, 0.8], p_amt: [0, 0.03], decay: [0.22, 0.36], curve: [0.5, 1], attack: [0, 0.02], hold: [0, 0.05], b_level: [0.6, 0.9], b_pos: [0.75, 1], b_ratio: [0.62, 0.9], b_det: [-0.8, 0.8], b_track: [0, 0.1], n_level: [0.5, 0.9], n_colour: [0.5, 1], n_decay: [0.5, 0.8], fm_ab: [0.2, 0.6], fm_ba: [0, 0.35], f_morph: [0.75, 1], cutoff: [0.75, 0.95], reso: [0, 0.4] },
+  'open hat': { a_pos: [0.8, 1], a_tune: [0.6, 0.8], p_amt: [0, 0.03], decay: [0.48, 0.62], attack: [0, 0.03], hold: [0, 0.1], b_level: [0.6, 0.9], b_pos: [0.75, 1], b_ratio: [0.62, 0.9], b_det: [-0.8, 0.8], b_track: [0, 0.1], n_level: [0.5, 0.9], n_colour: [0.5, 1], n_decay: [0.6, 0.85], fm_ab: [0.2, 0.6], fm_ba: [0, 0.35], f_morph: [0.7, 1], cutoff: [0.72, 0.92], reso: [0, 0.4] },
+  cymbal: { a_pos: [0.7, 1], a_tune: [0.55, 0.75], p_amt: [0, 0.03], decay: [0.65, 0.82], attack: [0, 0.03], hold: [0, 0.1], b_level: [0.6, 0.9], b_pos: [0.7, 1], b_ratio: [0.65, 0.95], b_det: [-1, 1], b_track: [0, 0.1], n_level: [0.35, 0.75], n_colour: [0.3, 0.9], n_decay: [0.65, 0.9], fm_ab: [0.3, 0.7], fm_ba: [0.1, 0.45], f_morph: [0.6, 1], cutoff: [0.7, 0.9], reso: [0, 0.3] },
 };
 export const RECIPE_TYPES = Object.keys(STARTERS);
+// a recipe of any type: first one of the four groups, evenly (docs/SPEC.md 6.1), then a type in it by weight (a LOW is
+// mostly a kick), so kicks and hats come as often as percs
+export const GROUP_TYPES = { low: [['kick', 3], ['tom', 1]], mid: [['snare', 1], ['clap', 1]], midhigh: [['rim', 1], ['perc', 1], ['zap', 1]], treble: [['closed hat', 2], ['open hat', 1], ['cymbal', 1], ['bell', 1]] };
+export function anyType(rnd) {
+  const gs = Object.values(GROUP_TYPES), g = gs[Math.floor(rnd() * gs.length)], all = g.reduce((a, [, w]) => a + w, 0);
+  let r = rnd() * all; for (const [t, w] of g) { if ((r -= w) < 0) return t; } return g[0][0];
+}
 // parts a recipe leaves off unless its type names them (FM, NOISE, CLICK, DRIVE, FILTER 2; OSC B is named by every type)
 const OFF_UNLESS = ['fm_ab', 'fm_ba', 'n_level', 'c_level', 'drive', 'f2_mix'];
 // and FILTER 1 open, near enough, unless the type says otherwise
@@ -51,7 +58,7 @@ export function recipe(rnd, type) {
 // anywhere in it. Each entry: the type's choices for [OSC A, OSC B], with how often BASIC is kept
 const B = (n) => 'builtin:' + n;
 const TABLE_PICKS = {
-  kick: [[B('harmonics'), B('odd'), B('bend')], [], 0.75],
+  kick: [[B('harmonics'), B('odd'), B('bend')], [], 0.85],
   tom: [[B('harmonics'), B('odd'), B('formant')], [B('harmonics'), B('odd')], 0.6],
   perc: [[B('harmonics'), B('odd'), B('formant'), B('bend'), B('fold')], [B('sparse'), B('formant'), B('sync')], 0.4],
   zap: [[B('sync'), B('bend'), B('fold'), B('pulse')], [B('sync'), B('pulse'), B('steps')], 0.35],
@@ -65,11 +72,12 @@ const TABLE_PICKS = {
 };
 /** the tables for a new sound of a type ('' for FREE); p (its parameters) gets a fresh POSITION for a table that
  * isn't BASIC. -> { a, b } */
+const POS_MAX = { kick: 0.3 }; // (a kick stays near its table's start: the gentler end)
 export function pickTables(rnd, type, p) {
   const one = (list, keepBasic) => (!list.length || rnd() < keepBasic ? B('basic') : list[Math.floor(rnd() * list.length)]);
   const r = TABLE_PICKS[type];
   const t = r ? { a: one(r[0], r[2]), b: one(r[1], r[2]) } : { a: BUILTIN_IDS[Math.floor(rnd() * BUILTIN_IDS.length)], b: BUILTIN_IDS[Math.floor(rnd() * BUILTIN_IDS.length)] };
-  if (r && t.a !== B('basic')) p.a_pos = round(rnd());
+  if (r && t.a !== B('basic')) p.a_pos = round(rnd() * (POS_MAX[type] ?? 1));
   if (r && t.b !== B('basic')) p.b_pos = round(rnd());
   return t;
 }

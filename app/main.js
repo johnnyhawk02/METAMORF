@@ -2,18 +2,18 @@
 // knobs edit the key played last. The sound engine is in engine/ and sound/ (no UI there); the controls, colours and
 // phone view are in this folder.
 import { PARAMS, BY_ID, SECTIONS, BASE, OUT_DEFAULT, TYPES, KEYS, MAX_ENGINES, DEFAULT_ENGINES, DEFAULT_LOW, isBip, showValue, fullParams, clampN,
-  levelText, panText, sendText, panRange, engineOf, zoneOf, validRoute, MOD_SOURCES, MOD_NAMES, modDepth, routeKey, modulatable } from '../sound/params.js?v=mwm930re';
-import { free, recipe, alter, pickTables, pickRoutes, alterRoutes, RECIPE_TYPES } from '../sound/makers.js?v=mwm930re';
-import { sizeScale, decaySec, toneHz } from '../engine/reverb.js?v=mwm930re';
-import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm930re';
-import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm930re';
-import { presetName } from './names.js?v=mwm930re';
-import { $, clamp, hbar, knob, dragger, makeDice, DIE_SVG } from './controls.js?v=mwm930re';
-import { setupColours } from './colours.js?v=mwm930re';
-import { setupPhone } from './phone.js?v=mwm930re';
-import { render as renderOffline } from './offline.js?v=mwm930re';
-import * as WT from './wavetables.js?v=mwm930re';
-import { decodeWav, autoSize, SIZES } from './wav.js?v=mwm930re';
+  levelText, panText, sendText, panRange, engineOf, zoneOf, validRoute, MOD_SOURCES, MOD_NAMES, modDepth, routeKey, modulatable } from '../sound/params.js?v=mwma0hzc';
+import { free, recipe, alter, pickTables, pickRoutes, alterRoutes, anyType, RECIPE_TYPES } from '../sound/makers.js?v=mwma0hzc';
+import { sizeScale, decaySec, toneHz } from '../engine/reverb.js?v=mwma0hzc';
+import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwma0hzc';
+import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwma0hzc';
+import { presetName } from './names.js?v=mwma0hzc';
+import { $, clamp, hbar, knob, dragger, makeDice, DIE_SVG } from './controls.js?v=mwma0hzc';
+import { setupColours } from './colours.js?v=mwma0hzc';
+import { setupPhone } from './phone.js?v=mwma0hzc';
+import { render as renderOffline } from './offline.js?v=mwma0hzc';
+import * as WT from './wavetables.js?v=mwma0hzc';
+import { decodeWav, autoSize, SIZES } from './wav.js?v=mwma0hzc';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2); // C3 = 60
@@ -38,7 +38,7 @@ const S = {
   cur: 0, // the key on screen (its place, 0..24): the knobs edit it
   lastIn: [0, 6, 12, 18], // each engine's last key, for its tab
   locks: [[], [], [], []], // each engine's knobs with a closed padlock (ids; 'out.pan' etc. for the output's)
-  rand: { alter: 10, wild: false, source: 'free' },
+  rand: { alter: 10, wild: false, source: 'recipe', chosen: false }, // (source: RECIPE until one is picked by hand)
   ccMap: null, // CC number -> target; null: the Bass Station 2 map
   fx: structuredClone(FX_DEFAULTS),
   engLevel: [100, 100, 100, 100], // each engine's level (0..127), from the Bass Station 2's oscillator level knobs
@@ -72,7 +72,7 @@ try {
     S.engines = clamp(d.engines | 0, 1, MAX_ENGINES); S.low = clamp(d.low | 0, 0, 103); S.cur = clamp(d.cur | 0, 0, KEYS - 1);
     if (Array.isArray(d.lastIn)) S.lastIn = [0, 1, 2, 3].map((e) => clamp(d.lastIn[e] | 0, 0, KEYS - 1));
     if (Array.isArray(d.locks)) S.locks = [0, 1, 2, 3].map((e) => (Array.isArray(d.locks[e]) ? d.locks[e].filter((id) => BY_ID[id] || /^out\.(pan|send|level)$/.test(id) || /^tbl\.[ab]$/.test(id)) : []));
-    if (d.rand) S.rand = { alter: clamp(d.rand.alter | 0, 1, 100) || 10, wild: !!d.rand.wild, source: ['library', 'breed', 'morph', 'style', 'free', 'recipe'].includes(d.rand.source) ? d.rand.source : 'free' };
+    if (d.rand) S.rand = { alter: clamp(d.rand.alter | 0, 1, 100) || 10, wild: !!d.rand.wild, source: d.rand.chosen && ['library', 'breed', 'morph', 'style', 'free', 'recipe'].includes(d.rand.source) ? d.rand.source : 'recipe', chosen: !!d.rand.chosen };
     S.ccMap = d.ccMap && typeof d.ccMap === 'object' ? d.ccMap : null;
     S.fx = tidyFx(d.fx); S.fx.tempo = { bpm: clamp(d.fx?.tempo?.bpm | 0, 40, 240) || 120, ret: clamp(d.fx?.tempo?.ret ?? 2, 0, 4) };
     if (Array.isArray(d.engLevel)) S.engLevel = [0, 1, 2, 3].map((e) => clamp(d.engLevel[e] ?? 100, 0, 127));
@@ -106,7 +106,7 @@ const send = (m) => { if (node) node.port.postMessage(m); };
 async function startAudio() {
   if (ctx) { if (ctx.state !== 'running') await ctx.resume(); return; }
   ctx = new AudioContext({ latencyHint: 'interactive' });
-  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm930re', import.meta.url));
+  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwma0hzc', import.meta.url));
   node = new AudioWorkletNode(ctx, 'metamorf', { numberOfInputs: 0, outputChannelCount: [2] });
   WT.attach((m) => send(m), () => drawKnobs());
   node.port.onmessage = (e) => { if (e.data.type === 'peaks') { heard = Math.max(heard, ...e.data.peaks); showPeaks(e.data.peaks); showSc(e.data.sc || 0); showGr(e.data.gr || 0); } };
@@ -137,10 +137,9 @@ function play(place, vel, { back = false } = {}) {
 const touch = (place) => { const e = engOf(place); if (ringing[e] === place) send({ type: 'update', e, params: sound(S.keys[place]), out: S.keys[place].out }); };
 // the key on screen becomes this one (its engine's tab with it)
 function pick(place) {
-  const was = engOf(S.cur);
   if (place !== S.cur) closePop();
   S.cur = place; S.lastIn[engOf(place)] = place; save();
-  if (S.view !== 'synth' || was !== engOf(place)) { S.view = 'synth'; drawView(); }
+  // (playing or picking a key never changes the tab: only the tab buttons, F and the engine keys do)
   drawAll();
 }
 
@@ -613,7 +612,7 @@ function buildMake() {
   for (const [type, text] of [...TYPES, ['', 'ANY']]) {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm'; b.tabIndex = -1; b.textContent = text; b.dataset.type = type;
     b.title = type ? `Make this key a ${type}: a new one each press (UNDO takes it back)` : 'Make this key a sound of any type: a new one each press (UNDO takes it back)';
-    b.addEventListener('click', () => { if (!learn) randKey(type || RECIPE_TYPES[Math.floor(rnd() * RECIPE_TYPES.length)]); });
+    b.addEventListener('click', () => { if (!learn) randKey(type || anyType(rnd)); });
     el.querySelector('.mk').append(b);
   }
 }
@@ -632,7 +631,7 @@ const SOURCES = {
   free: { name: 'FREE', cap: 'EVERY KNOB ANYWHERE IN ITS SAFE RANGE' },
   recipe: { name: 'RECIPE', cap: 'A SOUND OF A TYPE: KICK, TOM, SNARE, CLAP, HATS …' },
 };
-const source = () => (SOURCES[S.rand.source] && !SOURCES[S.rand.source].needs ? S.rand.source : 'free');
+const source = () => (SOURCES[S.rand.source] && !SOURCES[S.rand.source].needs ? S.rand.source : 'recipe');
 function drawSource() {
   const src = source();
   for (const b of document.querySelectorAll('.srcrow .btn')) {
@@ -642,10 +641,10 @@ function drawSource() {
   $('src-cap').textContent = SOURCES[src].cap;
   diceBtn.title = `NEW SOUND (K): a new ${SOURCES[src].name.toLowerCase()} sound on this key only. UNDO takes it back; LEARN can put it on a button`;
 }
-for (const b of document.querySelectorAll('.srcrow .btn')) b.addEventListener('click', () => { S.rand.source = b.dataset.src; save(); drawSource(); detail(`NEW SOUNDS FROM <em>${SOURCES[source()].name}</em>: ${SOURCES[source()].cap.toLowerCase()}`); });
+for (const b of document.querySelectorAll('.srcrow .btn')) b.addEventListener('click', () => { S.rand.source = b.dataset.src; S.rand.chosen = true; save(); drawSource(); detail(`NEW SOUNDS FROM <em>${SOURCES[source()].name}</em>: ${SOURCES[source()].cap.toLowerCase()}`); });
 // a new sound: { p, name, type, from }
 function newSound(type) {
-  const src = type ? 'recipe' : source(), t = type || (src === 'recipe' ? RECIPE_TYPES[Math.floor(rnd() * RECIPE_TYPES.length)] : '');
+  const src = type ? 'recipe' : source(), t = type || (src === 'recipe' ? anyType(rnd) : '');
   const p = t ? recipe(rnd, t) : free(rnd);
   return { p, t: pickTables(rnd, t, p), m: pickRoutes(rnd, t), name: presetName(rnd), type: t, from: t ? 'recipe' : 'free' };
 }

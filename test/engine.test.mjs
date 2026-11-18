@@ -40,8 +40,8 @@ ok(PARAMS.every((p) => p.safe[0] <= p.safe[1] && p.def >= (p.map === 'bip' ? -1 
   for (let t = 0; t < 300; t++) {
     const p = t % 3 === 0 ? free(rng) : t % 3 === 1 ? recipe(rng, RECIPE_TYPES[t % RECIPE_TYPES.length]) : alter(rng, free(rng), 1, true);
     const { L } = hit(p, { level: 1, pan: 0, send: 0, trim: 0 }, fs / 2, 127);
-    let s = 0; for (let i = L.length - fs / 10; i < L.length; i++) s += L[i]; const dc = Math.abs(s / (fs / 10)), pk = peak(L); // (DC: an offset left in the last 100 ms)
-    if (!L.every(Number.isFinite) || pk > 1 || (t % 3 < 2 && dc > 0.03)) bad++; // (cross-FM through DRIVE can wander slowly below 10 Hz: musical, not an offset; the voice's DC blocker takes any true DC) worst = Math.max(worst, pk); // (DC: FREE and recipes; a wild alter may go subsonic)
+    let s = 0, e = 0; for (let i = 0; i < L.length; i++) { s += L[i]; e += L[i] * L[i]; } const dc = Math.abs(s / L.length) / Math.max(0.3, Math.sqrt(e / L.length)), pk = peak(L); // (DC: the mean over the whole 500 ms against the RMS (at least 0.3), under a tenth, so a loud dark noise or a slow cross-FM wander still ringing isn't taken for an offset)
+    if (!L.every(Number.isFinite) || pk > 1 || (t % 3 < 2 && dc > 0.1)) bad++; // (cross-FM through DRIVE can wander slowly below 10 Hz: musical, not an offset; the voice's DC blocker takes any true DC) worst = Math.max(worst, pk); // (DC: FREE and recipes; a wild alter may go subsonic)
   }
   ok(bad === 0, `${bad} random sounds not finite, over full scale or with DC (worst peak ${worst})`); }
 // a voice ends: silent after its decay, and its engine free

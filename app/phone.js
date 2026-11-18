@@ -3,7 +3,7 @@
 // pressed last, its REVERB send, LOCK, INIT PATCH, RANDOM ALL and UNDO, and a MENU with RANDOM and ALTER for that
 // pad's engine and ALTER ALL. Its buttons press the big screen's own, so the rules live in one place. ?desktop keeps
 // the big screen on a phone.
-import { $, clamp } from './controls.js?v=mwm930re';
+import { $, clamp } from './controls.js?v=mwma0hzc';
 
 export function setupPhone(A) {
   const { S, KEYS, engOf, zone, noteOf, noteName, ENG } = A;
