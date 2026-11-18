@@ -1,6 +1,6 @@
 // Offline renders: one sound played by itself, faster than real time, for measuring (auto level, the dud filter, the
 // rating mode). The same voice the instrument plays, so what is measured is what is heard; no master stage.
-import { Voice } from './voice.js?v=mwm8nfdt';
+import { Voice } from './voice.js?v=mwm8ui4x';
 
 /** render params (normalised, by id) with out (level, pan, send, trim) at velocity vel, for up to seconds, at fs.
  * The render stops early once the voice has ended. Returns { L, R, peak, length } (L, R: Float32Array) */

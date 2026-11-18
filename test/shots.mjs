@@ -187,6 +187,46 @@ for (const [w, h] of [[1440, 900], [1280, 800], [1440, 760], [1280, 700]]) {
     if (J(d0) !== J([true, true]) || J(d1) !== J([false, true]) || !(m1['env>cutoff'] > 0) || !(m1['vel>fm_ab'] < 0) || Object.keys(m1).length !== 2 || J(m2) !== J(m1) || !(r > 0.001))
       bad('modulation routes', d0, d1, m1, m2, r);
     await p.click('#start-btn'); await p.waitForTimeout(300); }
+  // ---- the modulation popup (build step 7): right-click a knob; a fader per source; double-click, CLEAR, UNDO; the
+  // marks on the knob; closing (Escape, outside, a second right-click, another key); padlocks keep amounts; no browser
+  // menu on anything else ----
+  { const cut = knobSel('cutoff', 'filter 1'), popped = () => M(() => { const e = document.querySelector('.modpop'); if (!e) return null; const r = e.getBoundingClientRect(), f = document.getElementById('faders').getBoundingClientRect();
+      return { title: e.querySelector('h3').textContent, rows: [...e.querySelectorAll('.mrow .lab')].map((x) => x.textContent), out: [...e.querySelectorAll('.mrow output')].map((x) => x.textContent), inside: r.left >= f.left - 1 && r.right <= f.right + 1 && r.top >= f.top - 1 && r.bottom <= f.bottom + 1 }; });
+    const knobBox = await p.locator(cut).boundingBox();
+    await M(() => { const k = metamorf.keys()[metamorf.cur()]; k.m = {}; k.lock = false; }); await M(() => metamorf.redraw());
+    await p.click(cut, { button: 'right' }); await p.waitForTimeout(80); const a = await popped();
+    const covers = await M(([x, y]) => !!document.elementFromPoint(x, y)?.closest('.modpop'), [knobBox.x + knobBox.width / 2, knobBox.y + knobBox.height / 2]);
+    if (!a || a.title !== 'CUTOFF · MODULATION' || J(a.rows) !== J(['MOD ENV', 'LFO', 'VELOCITY']) || J(a.out) !== J(['NONE', 'NONE', 'NONE']) || !a.inside || covers) bad('the popup opens', a, covers);
+    const tr = p.locator('.modpop .mtrack').nth(1), r = await tr.boundingBox();
+    await p.mouse.move(r.x + r.width / 2, r.y + r.height / 2); await p.mouse.down(); await p.mouse.move(r.x + r.width * 0.9, r.y + r.height / 2, { steps: 6 }); await p.mouse.up();
+    const b1 = await M(() => { const k = metamorf.keys()[metamorf.cur()], v = document.querySelector('.faders .vf[data-param="cutoff"]');
+      return { m: { ...k.m }, lit: v.classList.contains('keyed'), arc: v.querySelector('.marc').getAttribute('d'), dot: [...v.querySelectorAll('.md')].map((d) => d.classList.contains('on')), out: document.querySelectorAll('.modpop .mrow output')[1].textContent, msg: document.getElementById('detail').textContent }; });
+    if (!(b1.m['lfo>cutoff'] > 0.5) || !b1.lit || !b1.arc || J(b1.dot) !== J([false, true, false]) || !/^\+\d+st$/.test(b1.out) || !/CUTOFF · LFO \+\d+st/.test(b1.msg)) bad('a fader dragged', b1);
+    if (w === 1440 && h === 900 || w === 1280 && h === 700) await p.screenshot({ path: `${out}/popup-${w}x${h}.png` });
+    await tr.dblclick(); const b2 = await M(() => ({ ...metamorf.keys()[metamorf.cur()].m }));
+    if (b2['lfo>cutoff']) bad('double-click does not put the fader back', b2);
+    await p.mouse.move(r.x + r.width / 2, r.y + r.height / 2); await p.mouse.down(); await p.mouse.move(r.x + r.width * 0.2, r.y + r.height / 2, { steps: 4 }); await p.mouse.up();
+    const t0 = p.locator('.modpop .mtrack').nth(0), r0 = await t0.boundingBox(); await p.mouse.click(r0.x + r0.width * 0.8, r0.y + r0.height / 2);
+    const b3 = await M(() => ({ ...metamorf.keys()[metamorf.cur()].m }));
+    await p.click('.modpop .mfoot .btn'); const b4 = await M(() => ({ m: { ...metamorf.keys()[metamorf.cur()].m }, out: [...document.querySelectorAll('.modpop .mrow output')].map((x) => x.textContent) }));
+    await p.keyboard.press('z'); const b5 = await M(() => ({ m: { ...metamorf.keys()[metamorf.cur()].m }, out: document.querySelectorAll('.modpop .mrow output')[1].textContent }));
+    if (!(b3['lfo>cutoff'] < 0) || !(b3['env>cutoff'] > 0) || Object.keys(b4.m).length || J(b4.out) !== J(['NONE', 'NONE', 'NONE']) || J(b5.m) !== J(b3) || b5.out === 'NONE') bad('CLEAR and UNDO in the popup', b3, b4, b5);
+    // closing: Escape; a click outside; a second right-click; another key; NOISE SEED has VELOCITY only; PAN no popup
+    await p.keyboard.press('Escape'); const c1 = await popped();
+    await p.click(cut, { button: 'right' }); await p.mouse.click(5, 5); const c2 = await popped();
+    await p.click(cut, { button: 'right' }); await p.click(cut, { button: 'right' }); const c3 = await popped();
+    await p.click(cut, { button: 'right' }); await M(() => metamorf.noteOn(1, 49, 100)); await p.waitForTimeout(60); const c4 = await popped();
+    await M(() => metamorf.noteOn(1, 48, 100));
+    await p.click(knobSel('seed', 'noise'), { button: 'right' }); const c5 = await popped(); await p.keyboard.press('Escape');
+    await p.click(`.faders .vf:has(.lab:text-is("pan")) .knob`, { button: 'right' }); const c6 = await popped();
+    if (c1 || c2 || c3 || c4 || !c5 || J(c5.rows) !== J(['VELOCITY']) || c6) bad('closing the popup', !!c1, !!c2, !!c3, !!c4, c5, !!c6);
+    // a closed padlock on CUTOFF keeps its amounts through ALTER; an open one lets them move
+    await M(() => { const k = metamorf.keys()[metamorf.cur()]; k.m = { 'lfo>cutoff': -0.4, 'env>reso': 0.5 }; k.home = null; });
+    await p.locator(cut.replace(/ \.knob$/, ' .lock')).first().click();
+    for (let i = 0; i < 3; i++) await p.click('#alter-key');
+    const d1 = await M(() => ({ ...metamorf.keys()[metamorf.cur()].m }));
+    await p.locator(cut.replace(/ \.knob$/, ' .lock')).first().click();
+    if (d1['lfo>cutoff'] !== -0.4 || !(d1['env>reso'] > 0) || d1['env>reso'] === 0.5) bad('a padlock keeps the modulation amounts', d1); }
   await M(() => metamorf.noteOn(1, 48, 100));
   await p.screenshot({ path: `${out}/screen-${w}x${h}.png` });
   // the menus open on screen, inside the window

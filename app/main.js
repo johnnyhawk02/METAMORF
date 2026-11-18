@@ -2,17 +2,17 @@
 // knobs edit the key played last. The sound engine is in engine/ and sound/ (no UI there); the controls, colours and
 // phone view are in this folder.
 import { PARAMS, BY_ID, SECTIONS, BASE, OUT_DEFAULT, TYPES, KEYS, MAX_ENGINES, DEFAULT_ENGINES, DEFAULT_LOW, isBip, showValue, fullParams, clampN,
-  levelText, panText, sendText, panRange, engineOf, zoneOf, validRoute } from '../sound/params.js?v=mwm8nfdt';
-import { free, recipe, alter, pickTables, pickRoutes, alterRoutes, RECIPE_TYPES } from '../sound/makers.js?v=mwm8nfdt';
-import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm8nfdt';
-import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm8nfdt';
-import { presetName } from './names.js?v=mwm8nfdt';
-import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm8nfdt';
-import { setupColours } from './colours.js?v=mwm8nfdt';
-import { setupPhone } from './phone.js?v=mwm8nfdt';
-import { render as renderOffline } from './offline.js?v=mwm8nfdt';
-import * as WT from './wavetables.js?v=mwm8nfdt';
-import { decodeWav, autoSize, SIZES } from './wav.js?v=mwm8nfdt';
+  levelText, panText, sendText, panRange, engineOf, zoneOf, validRoute, MOD_SOURCES, MOD_NAMES, modDepth, routeKey, modulatable } from '../sound/params.js?v=mwm8ui4x';
+import { free, recipe, alter, pickTables, pickRoutes, alterRoutes, RECIPE_TYPES } from '../sound/makers.js?v=mwm8ui4x';
+import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm8ui4x';
+import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm8ui4x';
+import { presetName } from './names.js?v=mwm8ui4x';
+import { $, clamp, hbar, knob, dragger, makeDice, DIE_SVG } from './controls.js?v=mwm8ui4x';
+import { setupColours } from './colours.js?v=mwm8ui4x';
+import { setupPhone } from './phone.js?v=mwm8ui4x';
+import { render as renderOffline } from './offline.js?v=mwm8ui4x';
+import * as WT from './wavetables.js?v=mwm8ui4x';
+import { decodeWav, autoSize, SIZES } from './wav.js?v=mwm8ui4x';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2); // C3 = 60
@@ -49,7 +49,7 @@ const cleanLabel = (s) => String(s ?? '').replace(/[^a-z0-9 .+-]/gi, '').slice(0
 const num = (x, lo, hi, d) => { const v = Number(x); return Number.isFinite(v) ? clamp(v, lo, hi) : d; };
 function tidyKey(k) {
   if (!k || typeof k !== 'object') return blankKey();
-  const o = {}; if (k.o && typeof k.o === 'object') for (const id in k.o) if (BY_ID[id] && typeof k.o[id] === 'number') o[id] = clampN(BY_ID[id], k.o[id]);
+  const o = {}; if (k.o && typeof k.o === 'object') for (const id in k.o) if (typeof k.o[id] === 'number') { if (BY_ID[id]) o[id] = clampN(BY_ID[id], k.o[id]); else if (validRoute(id) && Number.isFinite(k.o[id])) o[id] = clamp(k.o[id], -1, 1); }
   const out = k.out || {};
   return { p: fullParams(k.p), t: tidyT(k.t), m: tidyM(k.m), homeM: k.home && k.homeM ? tidyM(k.homeM) : null, name: cleanName(k.name), type: TYPE_IDS.includes(k.type) ? k.type : '', from: cleanLabel(k.from) || 'base', o,
     home: k.home && typeof k.home === 'object' ? fullParams(k.home) : null, lock: !!k.lock,
@@ -103,7 +103,7 @@ const send = (m) => { if (node) node.port.postMessage(m); };
 async function startAudio() {
   if (ctx) { if (ctx.state !== 'running') await ctx.resume(); return; }
   ctx = new AudioContext({ latencyHint: 'interactive' });
-  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm8nfdt', import.meta.url));
+  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm8ui4x', import.meta.url));
   node = new AudioWorkletNode(ctx, 'metamorf', { numberOfInputs: 0, outputChannelCount: [2] });
   WT.attach((m) => send(m), () => drawKnobs());
   node.port.onmessage = (e) => { if (e.data.type === 'peaks') { heard = Math.max(heard, ...e.data.peaks); showPeaks(e.data.peaks); showSc(e.data.sc || 0); } };
@@ -135,6 +135,7 @@ const touch = (place) => { const e = engOf(place); if (ringing[e] === place) sen
 // the key on screen becomes this one (its engine's tab with it)
 function pick(place) {
   const was = engOf(S.cur);
+  if (place !== S.cur) closePop();
   S.cur = place; S.lastIn[engOf(place)] = place; save();
   if (S.view !== 'synth' || was !== engOf(place)) { S.view = 'synth'; drawView(); }
   drawAll();
@@ -187,6 +188,19 @@ function editOut(f, v) {
   const k = K(); if (k.lock) { lockedMsg(); drawKnobs(); return; }
   snapshot(`${keyName(S.cur)} ${f.toUpperCase()}`, `o/${S.cur}/${f}`);
   k.out[f] = v; touch(S.cur); save();
+}
+// a modulation amount changed by hand (in the popup, or by a learned hardware knob): a hand edit like a knob's, kept in
+// o by its route's id (so the knob's label lights and the fader's double-click puts it back)
+function editMod(key, v) {
+  const k = K(); if (k.lock) { lockedMsg(); drawKnobs(); return false; }
+  const [s, id] = key.split('>'), p = BY_ID[id];
+  snapshot(`${keyName(S.cur)} ${p.sec.toUpperCase()} ${p.label.toUpperCase()} ${MOD_NAMES[s]}`, `m/${S.cur}/${key}`);
+  if (!(key in k.o)) k.o[key] = k.m[key] || 0;
+  k.m = { ...k.m }; if (v) k.m[key] = v; else delete k.m[key];
+  if (k.o[key] === v) delete k.o[key];
+  k.home = null; k.homeM = null;
+  touch(S.cur); save(); drawStrip(); drawKeyHead(); drawKnobs();
+  return true;
 }
 const editCount = (k) => Object.keys(k.o).length;
 
@@ -249,7 +263,7 @@ const CC_DEFAULT = {
 const LATER = { cutoff: 'the filter', reso: 'the filter', f_morph: 'the filter' };
 const ccMap = () => S.ccMap || CC_DEFAULT;
 const OUT_NAMES = { send: 'reverb send', pan: 'pan', level: 'level' };
-const ccTargetName = (t) => (t.t === 'par' ? (BY_ID[t.id] ? `${BY_ID[t.id].sec} ${BY_ID[t.id].label}` : t.id) : t.t === 'out' ? OUT_NAMES[t.k] : t.t === 'randkey' ? 'new sound on the key' : `${ENG(t.e).toLowerCase()} level`);
+const ccTargetName = (t) => (t.t === 'mod' ? (() => { const [s, id] = String(t.key).split('>'); return BY_ID[id] ? `${BY_ID[id].sec} ${BY_ID[id].label} ${MOD_NAMES[s] || s}`.toLowerCase() : t.key; })() : t.t === 'par' ? (BY_ID[t.id] ? `${BY_ID[t.id].sec} ${BY_ID[t.id].label}` : t.id) : t.t === 'out' ? OUT_NAMES[t.k] : t.t === 'randkey' ? 'new sound on the key' : `${ENG(t.e).toLowerCase()} level`);
 const ccHeld = {};
 let learn = null; // null, { armed: true } waiting for a control, then { target } waiting for a knob
 let ccDraw = 0;
@@ -265,6 +279,12 @@ function onCC(cc, val) {
   if (!t) { showLastText(`CC${cc} ${val} · not mapped (LEARN maps it)`); return; }
   let text;
   if (t.t === 'randkey') { const up = val >= 64, was = ccHeld[cc]; ccHeld[cc] = up; if (up && !was) randKey(); return; }
+  if (t.t === 'mod') {
+    const [s, id] = String(t.key).split('>'), p = BY_ID[id]; if (!p || !modulatable(s, id)) return;
+    const v = Math.abs(val - 64) <= 1 ? 0 : clamp((val - 64) / 63, -1, 1);
+    if (editMod(t.key, Math.round(v * 1000) / 1000)) showLastText(`CC${cc} · ${keyName(S.cur)} ${modTitle(p)} ${MOD_NAMES[s]} ${modText(p, s, K().m[t.key] || 0)}`.toUpperCase());
+    return;
+  }
   if (t.t === 'elevel') { S.engLevel[t.e] = val; sendEngineGains(); save(); text = `${ENG(t.e)} LEVEL ${val}`; }
   else if (t.t === 'out') {
     const v = t.k === 'pan' ? (Math.abs(val - 64) <= 1 ? 0 : (val - 64) / 63) : val / 127;
@@ -332,8 +352,90 @@ const ROWS = [['osc a', 'osc b', 'fm'], ['noise', 'click', 'pitch env', 'drive']
 const PART_GATE = { 'osc a': ['a_level'], 'osc b': ['b_level'], fm: ['fm_ab', 'fm_ba'], noise: ['n_level'], click: ['c_level'], 'pitch env': ['p_amt'], drive: ['drive'], 'filter 2': ['f2_mix'] };
 // a knob drawn dim while another is at zero: VOWEL while FILTER 2 is all comb
 const KNOB_DIM = { f2_vowel: 'f2_blend', spacing: 'repeat' };
-// MOD ENV and the LFO: dim while the key has no route from them (the routes are set in the modulation popup, build step 7)
+// MOD ENV and the LFO: dim while the key has no amount from them (amounts are set in each knob's modulation popup)
 const SRC_GATE = { 'mod env': 'env', lfo: 'lfo' };
+
+// ---- the modulation popup: right-click a sound knob. A fader per source (MOD ENV, LFO, VELOCITY), centre none,
+// in the knob's own units; double-click puts a fader back to where it was when the popup opened; CLEAR sets all three
+// to none. It sits on the grid in the rows beside the knob's (never over it), and closes on a click outside, Escape,
+// a second right-click on the knob, or another key picked ----
+const DUP_LABELS = new Set(PARAMS.map((p) => p.label).filter((l, i, a) => a.indexOf(l) !== i));
+const modTitle = (p) => (DUP_LABELS.has(p.label) ? `${p.sec} ${p.label}` : p.label).toUpperCase();
+const FREQ_IDS = new Set(['cutoff', 'f2_pitch', 'c_tone', 'lfo_rate', 'b_ratio']), ST_IDS = { a_tune: 48, p_amt: 96 }, CENT_IDS = new Set(['a_fine', 'b_det']);
+const sgn = (x) => (x > 0 ? '+' : x < 0 ? '−' : '');
+/** an amount in the knob's own units: semitones for a frequency, times for a time, cents, else a share of the range */
+function modText(p, s, a) {
+  if (!a) return 'NONE';
+  const d = a * modDepth(s, p.id), n = (x) => (Math.abs(x) < 10 ? Math.abs(x).toFixed(1) : String(Math.round(Math.abs(x))));
+  if (FREQ_IDS.has(p.id)) return sgn(d) + n(d * 12 * Math.log2(p.hi / p.lo)) + 'st';
+  if (p.map === 'log') { const r = Math.pow(p.hi / p.lo, Math.abs(d)); return (d > 0 ? '×' : '÷') + (r < 10 ? r.toFixed(2) : r.toFixed(0)); }
+  if (ST_IDS[p.id]) return sgn(d) + n(d * ST_IDS[p.id]) + 'st';
+  if (CENT_IDS.has(p.id)) return sgn(d) + Math.round(Math.abs(d) * 100) + 'c';
+  return sgn(d) + Math.round(Math.abs(d) * 100) + '%';
+}
+/** how far a key's modulation moves a knob (in the knob's units), for the arc; null for none */
+function modReach(k, p) {
+  const a = MOD_SOURCES.map((s) => (k.m[routeKey(s, p.id)] || 0) * modDepth(s, p.id));
+  if (!a.some((x) => x)) return null;
+  const v = k.p[p.id], l = Math.abs(a[1]), w = Math.abs(a[2]);
+  return { lo: v + Math.min(0, a[0], -l, -w), hi: v + Math.max(0, a[0], l, w), on: a.map((x) => !!x) };
+}
+const FADER_SEGS = 21;
+var pop = null; // (var: read before this line runs) the open popup: { id, el, kel, draw }
+function closePop() { if (!pop) return; pop.el.remove(); pop = null; }
+function openPop(p, kel) {
+  if (pop && pop.id === p.id) { closePop(); return; }
+  closePop();
+  const box = $('faders'), R = +kel.dataset.r + 1, c = +kel.dataset.c, W = 5;
+  const c0 = clamp(c - 2, 1, GRID_COLS + 1 - W), rows = R <= 2 ? [R + 1, R + 3] : [R - 2, R];
+  const el = document.createElement('div'); el.className = 'modpop'; el.style.gridArea = `${rows[0]} / ${c0} / ${rows[1]} / ${c0 + W}`;
+  el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', `${modTitle(p)} modulation`);
+  el.innerHTML = `<h3>${modTitle(p)} · MODULATION</h3><div class="mrows"></div><div class="mfoot"><button class="btn" type="button" tabindex="-1">CLEAR</button><span>double-click a fader: back to where it was</span></div>`;
+  const srcs = MOD_SOURCES.filter((s) => modulatable(s, p.id)), start = Object.fromEntries(srcs.map((s) => [s, K().m[routeKey(s, p.id)] || 0]));
+  const draws = srcs.map((s) => {
+    const key = routeKey(s, p.id), row = document.createElement('div'); row.className = 'mrow';
+    row.innerHTML = `<span class="lab">${MOD_NAMES[s]}</span><div class="mtrack" role="slider">${'<b></b>'.repeat(FADER_SEGS)}</div><output></output>`;
+    const tr = row.querySelector('.mtrack'), segs = tr.querySelectorAll('b'), out = row.querySelector('output'), mid = (FADER_SEGS - 1) / 2;
+    tr.setAttribute('aria-label', `${modTitle(p)} ${MOD_NAMES[s]}`); tr.dataset.learn = JSON.stringify({ t: 'mod', key }); tr.dataset.src = s;
+    const get = () => K().m[key] || 0;
+    const draw = () => { const v = get(), at = Math.round(mid + v * mid), a = Math.min(at, mid), b = Math.max(at, mid);
+      segs.forEach((g, i) => g.classList.toggle('on', v !== 0 && i >= a && i <= b)); out.textContent = modText(p, s, v); tr.setAttribute('aria-valuenow', v); };
+    const put = (v) => { v = Math.round(clamp(v, -1, 1) * 1000) / 1000; if (Math.abs(v) < 0.03) v = 0; if (v === get()) return;
+      if (editMod(key, v)) detail(`${keyName(S.cur)} ${modTitle(p)} · ${MOD_NAMES[s]} <em>${modText(p, s, v)}</em>`); draw(); };
+    dragger(tr, 'x', { min: -1, max: 1, get, put });
+    tr.addEventListener('dblclick', () => { if (get() !== start[s]) { put(start[s]); detail(`${keyName(S.cur)} ${modTitle(p)} · ${MOD_NAMES[s]} back to <em>${modText(p, s, start[s])}</em>`); } });
+    el.querySelector('.mrows').append(row);
+    return draw;
+  });
+  el.querySelector('.mfoot .btn').addEventListener('click', () => {
+    const keys = srcs.map((s) => routeKey(s, p.id)).filter((key) => K().m[key]);
+    if (!keys.length) { detail(`${modTitle(p)}: no modulation to clear`); return; }
+    if (K().lock) { lockedMsg(); return; }
+    snapshot(`${keyName(S.cur)} ${modTitle(p)} MODULATION CLEAR`);
+    const k = K(); k.m = { ...k.m };
+    for (const key of keys) { if (!(key in k.o)) k.o[key] = k.m[key]; delete k.m[key]; if (k.o[key] === 0) delete k.o[key]; }
+    k.home = null; k.homeM = null; touch(S.cur); save(); drawStrip(); drawKeyHead(); drawKnobs();
+    detail(`${keyName(S.cur)} ${modTitle(p)}: <em>modulation cleared</em> · UNDO takes it back`);
+  });
+  box.append(el);
+  pop = { id: p.id, el, kel, draw: () => draws.forEach((d) => d()) };
+  pop.draw();
+  const on = srcs.filter((s) => K().m[routeKey(s, p.id)]).length;
+  detail(`${modTitle(p)} · MODULATION: ${on ? `<em>${on} of ${srcs.length}</em> sources on` : 'none yet'} · drag a fader from the centre`);
+}
+// right-click: a sound knob opens its popup; anywhere else, no browser menu
+document.addEventListener('contextmenu', (e) => {
+  if (e.target.closest('input, textarea, [contenteditable]')) return;
+  e.preventDefault();
+  const vf = e.target.closest('#faders .vf[data-param]');
+  if (vf && !learn && !K().lock) openPop(BY_ID[vf.dataset.param], vf);
+});
+document.addEventListener('pointerdown', (e) => {
+  if (!pop || pop.el.contains(e.target)) return;
+  if (e.button === 2 && e.target.closest('#faders .vf[data-param]')) return; // (the right-click itself decides)
+  closePop();
+}, true);
+
 let knobDraws = [];
 const drawKnobs = () => knobDraws.forEach((d) => d());
 const locked = (e, id) => S.locks[e].includes(id);
@@ -347,7 +449,8 @@ const POS_OF = { a_pos: 'a', b_pos: 'b' };
 const showParam = (p, v) => (POS_OF[p.id] && K().t[POS_OF[p.id]] !== WT.DEFAULT_TABLE ? Math.round(v * 100) + '%' : showValue(p, v));
 function paramKnob(p) {
   return knob({ label: p.label, min: isBip(p) ? -1 : 0, max: 1, centre: isBip(p) ? 0 : undefined,
-    get: () => K().p[p.id], show: (v) => showParam(p, v), was: () => K().o[p.id], lit: () => p.id in K().o,
+    get: () => K().p[p.id], show: (v) => showParam(p, v), was: () => K().o[p.id], lit: () => p.id in K().o || MOD_SOURCES.some((s) => routeKey(s, p.id) in K().o),
+    mod: () => modReach(K(), p),
     set: (v) => { editParam(p.id, v); detail(`${keyName(S.cur)} ${p.sec.toUpperCase()} ${p.label.toUpperCase()} <em>${showParam(p, v)}</em>${p.id === 'c_direct' ? ' · the click skips the filters by this much once they arrive (build step 5)' : ''}`); drawGates(); },
     reset: () => { const w = K().o[p.id]; if (K().lock) lockedMsg(); else if (w !== undefined) { editParam(p.id, w); detail(`${keyName(S.cur)} ${p.label.toUpperCase()} back to <em>${showParam(p, w)}</em>`); drawGates(); } },
     lock: { get: () => locked(engOf(S.cur), p.id), toggle: () => toggleLock(p.id, `${p.sec.toUpperCase()} ${p.label.toUpperCase()}`) },
@@ -386,6 +489,7 @@ function outKnob(f) {
 let gateDraws = [];
 const drawGates = () => gateDraws.forEach((d) => d());
 function buildKnobs() {
+  closePop();
   const box = $('faders'); box.innerHTML = ''; knobDraws = []; gateDraws = [];
   box.style.setProperty('--cols', GRID_COLS + 2); box.style.setProperty('--rows', GRID_ROWS);
   const cell = (el, r0, r1, c0, c1) => { el.style.gridArea = `${r0} / ${c0} / ${r1} / ${c1}`; return el; };
@@ -397,10 +501,11 @@ function buildKnobs() {
       const list = sec === 'output' ? ['pan'] : [...(tbl ? ['table'] : []), ...PARAMS.filter((p) => p.sec === sec)];
       const el = sect(list.length);
       el.innerHTML = `<h3>${sec}</h3><div class="row"></div>`;
-      for (const p of list) {
+      list.forEach((p, i) => {
         const k = sec === 'output' ? outKnob(p) : p === 'table' ? tableKnob(tbl) : paramKnob(p); el.querySelector('.row').append(k.el); knobDraws.push(k.draw);
+        if (p.id) Object.assign(k.el.dataset, { param: p.id, r: r, c: col - list.length + i }); // (where it sits: the popup goes beside it)
         const dim = KNOB_DIM[p.id]; if (dim) { const d = () => k.el.classList.toggle('off', !K().p[dim]); gateDraws.push(d); knobDraws.push(d); }
-      }
+      });
       const sg = SRC_GATE[sec]; if (sg) { const d = () => el.classList.toggle('off', !Object.keys(K().m).some((key) => key.startsWith(sg + '>'))); gateDraws.push(d); knobDraws.push(d); }
       const g = PART_GATE[sec]; if (g) { const d = () => el.classList.toggle('off', g.every((id) => !K().p[id])); gateDraws.push(d); knobDraws.push(d); }
     }
@@ -411,6 +516,7 @@ function buildKnobs() {
   { const k = outKnob('send'); sends.querySelector('.row').append(k.el); knobDraws.push(k.draw); }
   box.append(sends);
   const big = outKnob('level'); cell(big.el, 2, GRID_ROWS + 1, GRID_COLS + 1, GRID_COLS + 3); big.el.classList.add('big', 'rt', 'sep'); box.append(big.el); knobDraws.push(big.draw);
+  knobDraws.push(() => pop && pop.draw());
   drawKnobs();
 }
 
@@ -543,9 +649,14 @@ function deal(place, s) {
   const k = S.keys[place], e = engOf(place), keep = S.locks[e];
   const p = { ...s.p }; for (const id of keep) if (BY_ID[id]) p[id] = k.p[id];
   const t = { a: keep.includes('tbl.a') ? k.t.a : s.t.a, b: keep.includes('tbl.b') ? k.t.b : s.t.b };
-  Object.assign(k, { p, t, m: { ...s.m }, name: s.name, type: s.type, from: s.from, o: {}, home: null, homeM: null });
+  Object.assign(k, { p, t, m: keepRoutes(s.m, k.m, keep), name: s.name, type: s.type, from: s.from, o: {}, home: null, homeM: null });
   if (!keep.includes('out.pan')) { const r = panRange(s.type); k.out.pan = Math.round((rnd() * 2 - 1) * r * 100) / 100; }
 }
+// a closed padlock keeps the knob's modulation amounts too: the new routes, with the locked knobs' routes as they were
+const keepRoutes = (m, was, keep) => { const o = {}, held = new Set(keep.filter((id) => BY_ID[id]));
+  for (const key in m) if (!held.has(key.split('>')[1])) o[key] = m[key];
+  for (const key in was) if (held.has(key.split('>')[1])) o[key] = was[key];
+  return o; };
 const keptNote = (engines) => {
   const names = [...new Set(engines.flatMap((e) => S.locks[e]).map((id) => (BY_ID[id] ? `${BY_ID[id].sec} ${BY_ID[id].label}` : id.startsWith('tbl.') ? `osc ${id.slice(4)} table` : id.slice(4)).toUpperCase()))];
   return !names.length ? '' : names.join(', ').length <= 16 ? ` · locked <em>${names.join(', ')}</em> kept` : ` · <em>${names.length} locked knobs</em> kept`;
@@ -572,7 +683,7 @@ function alterOne(place) {
   const k = S.keys[place]; if (k.lock) return;
   if (!k.home) { k.home = { ...k.p }; k.homeM = { ...k.m }; }
   const keep = S.locks[engOf(place)];
-  k.m = alterRoutes(rnd, k.homeM || k.m, S.rand.alter / 100, S.rand.wild);
+  k.m = keepRoutes(alterRoutes(rnd, k.homeM || k.m, S.rand.alter / 100, S.rand.wild), k.m, keep);
   k.p = alter(rnd, k.home, S.rand.alter / 100, S.rand.wild, (id) => keep.includes(id)); k.o = {};
   for (const id of keep) if (BY_ID[id]) k.p[id] = k.home[id];
 }
@@ -704,7 +815,7 @@ function buildFx() {
 // ---------------------------------------------------------------------------------------------------------------
 function stepKey(by) { const to = (S.cur + by + KEYS) % KEYS; startAudio().then(() => play(to, 100)); }
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { openMenu(false); openPresets(false); openSettings(false); if (learn) setLearn(null); return; }
+  if (e.key === 'Escape') { closePop(); openMenu(false); openPresets(false); openSettings(false); if (learn) setLearn(null); return; }
   const typing = e.target.closest('input, select, textarea, [contenteditable]');
   if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && (e.key === 'c' || e.key === 'v')) {
     if (typing || String(getSelection())) return;
@@ -1001,7 +1112,7 @@ document.fonts?.ready.then(alignEngines);
 drawWt(); WT.loadUsers().then((n) => { if (n) { drawWt(); drawAll(); sendTables(); } });
 
 // for testing without a controller: metamorf.noteOn(channel, note, velocity), metamorf.cc(number, value)
-window.metamorf = { noteOn: (ch, note, vel = 100) => noteOn(ch, note, vel), noteOff: (note) => noteOff(note), cc: (cc, val) => onCC(cc, val),
+window.metamorf = { redraw: () => drawAll(), noteOn: (ch, note, vel = 100) => noteOn(ch, note, vel), noteOff: (note) => noteOff(note), cc: (cc, val) => onCC(cc, val),
   keys: () => S.keys, cur: () => S.cur, engines: () => S.engines, low: () => S.low, fx: () => S.fx, locks: () => S.locks, rand: () => S.rand,
   presets: { list: () => presets, now: () => S.preset, dirty: presetDirty, import: importPresets }, undoDepth: () => undoStack.length,
   audio: () => ({ state: ctx ? ctx.state : 'none', heard, error: audioError }),
