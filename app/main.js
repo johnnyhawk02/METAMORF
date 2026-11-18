@@ -2,15 +2,17 @@
 // knobs edit the key played last. The sound engine is in engine/ and sound/ (no UI there); the controls, colours and
 // phone view are in this folder.
 import { PARAMS, BY_ID, SECTIONS, BASE, OUT_DEFAULT, TYPES, KEYS, MAX_ENGINES, DEFAULT_ENGINES, DEFAULT_LOW, isBip, showValue, fullParams, clampN,
-  levelText, panText, sendText, panRange, engineOf, zoneOf } from '../sound/params.js?v=mwm61gqf';
-import { free, recipe, alter, RECIPE_TYPES } from '../sound/makers.js?v=mwm61gqf';
-import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm61gqf';
-import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm61gqf';
-import { presetName } from './names.js?v=mwm61gqf';
-import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm61gqf';
-import { setupColours } from './colours.js?v=mwm61gqf';
-import { setupPhone } from './phone.js?v=mwm61gqf';
-import { render as renderOffline } from './offline.js?v=mwm61gqf';
+  levelText, panText, sendText, panRange, engineOf, zoneOf } from '../sound/params.js?v=mwm79h1i';
+import { free, recipe, alter, pickTables, RECIPE_TYPES } from '../sound/makers.js?v=mwm79h1i';
+import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm79h1i';
+import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm79h1i';
+import { presetName } from './names.js?v=mwm79h1i';
+import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm79h1i';
+import { setupColours } from './colours.js?v=mwm79h1i';
+import { setupPhone } from './phone.js?v=mwm79h1i';
+import { render as renderOffline } from './offline.js?v=mwm79h1i';
+import * as WT from './wavetables.js?v=mwm79h1i';
+import { decodeWav, autoSize, SIZES } from './wav.js?v=mwm79h1i';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2); // C3 = 60
@@ -23,8 +25,10 @@ const STORE = 'metamorf-v1';
 const TYPE_IDS = TYPES.map((t) => t[0]);
 // a key: its sound (p: every parameter, normalised, by id; name, type, from), its hand edits (o: what a control was
 // before it was changed by hand), its home (what ALTER varies around), its lock, and its output (out: level, pan,
-// send, trim: part of the mix, not of the sound)
-const blankKey = () => ({ p: { ...BASE }, name: '', type: '', from: 'base', o: {}, home: null, lock: false, out: { ...OUT_DEFAULT } });
+// send, trim: part of the mix, not of the sound), and its oscillators' tables (t: a and b, by id)
+const baseTables = () => ({ a: WT.DEFAULT_TABLE, b: WT.DEFAULT_TABLE });
+const blankKey = () => ({ p: { ...BASE }, t: baseTables(), name: '', type: '', from: 'base', o: {}, home: null, lock: false, out: { ...OUT_DEFAULT } });
+const tidyT = (t) => ({ a: WT.validId(t?.a) ? t.a : WT.DEFAULT_TABLE, b: WT.validId(t?.b) ? t.b : WT.DEFAULT_TABLE });
 const S = {
   keys: Array.from({ length: KEYS }, blankKey),
   engines: DEFAULT_ENGINES, low: DEFAULT_LOW,
@@ -45,7 +49,7 @@ function tidyKey(k) {
   if (!k || typeof k !== 'object') return blankKey();
   const o = {}; if (k.o && typeof k.o === 'object') for (const id in k.o) if (BY_ID[id] && typeof k.o[id] === 'number') o[id] = clampN(BY_ID[id], k.o[id]);
   const out = k.out || {};
-  return { p: fullParams(k.p), name: cleanName(k.name), type: TYPE_IDS.includes(k.type) ? k.type : '', from: cleanLabel(k.from) || 'base', o,
+  return { p: fullParams(k.p), t: tidyT(k.t), name: cleanName(k.name), type: TYPE_IDS.includes(k.type) ? k.type : '', from: cleanLabel(k.from) || 'base', o,
     home: k.home && typeof k.home === 'object' ? fullParams(k.home) : null, lock: !!k.lock,
     out: { level: num(out.level, 0, 1, OUT_DEFAULT.level), pan: num(out.pan, -1, 1, 0), send: num(out.send, 0, 1, 0), trim: num(out.trim, -16, 12, 0) } };
 }
@@ -62,7 +66,7 @@ try {
     S.keys = Array.from({ length: KEYS }, (_, i) => tidyKey(d.keys[i]));
     S.engines = clamp(d.engines | 0, 1, MAX_ENGINES); S.low = clamp(d.low | 0, 0, 103); S.cur = clamp(d.cur | 0, 0, KEYS - 1);
     if (Array.isArray(d.lastIn)) S.lastIn = [0, 1, 2, 3].map((e) => clamp(d.lastIn[e] | 0, 0, KEYS - 1));
-    if (Array.isArray(d.locks)) S.locks = [0, 1, 2, 3].map((e) => (Array.isArray(d.locks[e]) ? d.locks[e].filter((id) => BY_ID[id] || /^out\.(pan|send|level)$/.test(id)) : []));
+    if (Array.isArray(d.locks)) S.locks = [0, 1, 2, 3].map((e) => (Array.isArray(d.locks[e]) ? d.locks[e].filter((id) => BY_ID[id] || /^out\.(pan|send|level)$/.test(id) || /^tbl\.[ab]$/.test(id)) : []));
     if (d.rand) S.rand = { alter: clamp(d.rand.alter | 0, 1, 100) || 10, wild: !!d.rand.wild, source: ['library', 'breed', 'morph', 'style', 'free', 'recipe'].includes(d.rand.source) ? d.rand.source : 'free' };
     S.ccMap = d.ccMap && typeof d.ccMap === 'object' ? d.ccMap : null;
     S.fx = tidyFx(d.fx); S.fx.tempo = { bpm: clamp(d.fx?.tempo?.bpm | 0, 40, 240) || 120, ret: clamp(d.fx?.tempo?.ret ?? 2, 0, 4) };
@@ -97,15 +101,20 @@ const send = (m) => { if (node) node.port.postMessage(m); };
 async function startAudio() {
   if (ctx) { if (ctx.state !== 'running') await ctx.resume(); return; }
   ctx = new AudioContext({ latencyHint: 'interactive' });
-  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm61gqf', import.meta.url));
+  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm79h1i', import.meta.url));
   node = new AudioWorkletNode(ctx, 'metamorf', { numberOfInputs: 0, outputChannelCount: [2] });
+  WT.attach((m) => send(m), () => drawKnobs());
   node.port.onmessage = (e) => { if (e.data.type === 'peaks') { heard = Math.max(heard, ...e.data.peaks); showPeaks(e.data.peaks); showSc(e.data.sc || 0); } };
   // (the sound engine failed on the audio thread: say so, rather than play silence)
   node.onprocessorerror = () => { audioError = 'the sound engine stopped'; detail('<em>no sound</em>: the sound engine stopped with an error. Reload the page; if it keeps happening, tell Claude'); };
   node.connect(ctx.destination);
-  sendFx(); send({ type: 'engines', n: S.engines }); sendEngineGains();
+  sendFx(); send({ type: 'engines', n: S.engines }); sendEngineGains(); sendTables();
   if (ctx.state !== 'running') await ctx.resume();
 }
+// every table the keys name, to the audio thread (each once; until one arrives its notes play BASIC)
+const sendTables = () => WT.ensure(S.keys.flatMap((k) => [k.t.a, k.t.b]));
+// a key's sound as the engine takes it: its parameters, and its tables by id
+const sound = (k) => ({ ...k.p, $a: k.t.a, $b: k.t.b });
 const sendFx = () => { send({ type: 'fx', fx: S.fx }); save(); };
 const sendEngineGains = () => send({ type: 'egain', gains: [0, 1, 2, 3].map(engineGain) });
 // what each engine is playing (its key's place), so a change to that key reaches the note still ringing
@@ -113,13 +122,14 @@ const ringing = [-1, -1, -1, -1];
 function play(place, vel, { back = false } = {}) {
   const e = engOf(place), k = S.keys[place];
   if (ctx && ctx.state !== 'running') ctx.resume();
-  send({ type: back ? 'back' : 'play', e, params: k.p, out: k.out, vel });
+  WT.ensure([k.t.a, k.t.b]);
+  send({ type: back ? 'back' : 'play', e, params: sound(k), out: k.out, vel });
   ringing[e] = place;
   showLast(place, vel);
   pick(place);
 }
 // a key's sound or output changed: to the note ringing, if it's this key's
-const touch = (place) => { const e = engOf(place); if (ringing[e] === place) send({ type: 'update', e, params: S.keys[place].p, out: S.keys[place].out }); };
+const touch = (place) => { const e = engOf(place); if (ringing[e] === place) send({ type: 'update', e, params: sound(S.keys[place]), out: S.keys[place].out }); };
 // the key on screen becomes this one (its engine's tab with it)
 function pick(place) {
   const was = engOf(S.cur);
@@ -324,13 +334,33 @@ function toggleLock(id, label) {
   S.locks[e] = on ? [...S.locks[e], id] : S.locks[e].filter((x) => x !== id); save(); drawLocks();
   detail(on ? `${ENG(e)} ${label} <em>locked</em>: the randomisers leave it as it is, on every key of the engine` : `${ENG(e)} ${label} <em>unlocked</em>`);
 }
+// POSITION: BASIC's shapes by name, any other table as how far through it
+const POS_OF = { a_pos: 'a', b_pos: 'b' };
+const showParam = (p, v) => (POS_OF[p.id] && K().t[POS_OF[p.id]] !== WT.DEFAULT_TABLE ? Math.round(v * 100) + '%' : showValue(p, v));
 function paramKnob(p) {
   return knob({ label: p.label, min: isBip(p) ? -1 : 0, max: 1, centre: isBip(p) ? 0 : undefined,
-    get: () => K().p[p.id], show: (v) => showValue(p, v), was: () => K().o[p.id], lit: () => p.id in K().o,
-    set: (v) => { editParam(p.id, v); detail(`${keyName(S.cur)} ${p.sec.toUpperCase()} ${p.label.toUpperCase()} <em>${showValue(p, v)}</em>`); drawGates(); },
-    reset: () => { const w = K().o[p.id]; if (K().lock) lockedMsg(); else if (w !== undefined) { editParam(p.id, w); detail(`${keyName(S.cur)} ${p.label.toUpperCase()} back to <em>${showValue(p, w)}</em>`); drawGates(); } },
+    get: () => K().p[p.id], show: (v) => showParam(p, v), was: () => K().o[p.id], lit: () => p.id in K().o,
+    set: (v) => { editParam(p.id, v); detail(`${keyName(S.cur)} ${p.sec.toUpperCase()} ${p.label.toUpperCase()} <em>${showParam(p, v)}</em>`); drawGates(); },
+    reset: () => { const w = K().o[p.id]; if (K().lock) lockedMsg(); else if (w !== undefined) { editParam(p.id, w); detail(`${keyName(S.cur)} ${p.label.toUpperCase()} back to <em>${showParam(p, w)}</em>`); drawGates(); } },
     lock: { get: () => locked(engOf(S.cur), p.id), toggle: () => toggleLock(p.id, `${p.sec.toUpperCase()} ${p.label.toUpperCase()}`) },
     learn: { t: 'par', id: p.id } });
+}
+// TABLE: which wavetable an oscillator reads, stepping through the built-ins and then the user's own. Not a hand edit
+// with a notch (it's a reference, not a value); UNDO takes it back. A missing one reads MISSING (and plays BASIC)
+const tblLabel = (o) => `OSC ${o.toUpperCase()} TABLE`;
+function editTable(o, id) {
+  const k = K(); if (k.lock) { lockedMsg(); drawKnobs(); return; }
+  snapshot(`${keyName(S.cur)} ${tblLabel(o)}`, `t/${S.cur}/${o}`);
+  k.t[o] = id; WT.ensure([id]); touch(S.cur); save(); drawStrip(); drawKeyHead(); drawKnobs();
+}
+function tableKnob(o) {
+  const ids = () => { const l = WT.tableIds(); return WT.known(K().t[o]) ? l : [...l, K().t[o]]; };
+  return knob({ label: 'table', min: 0, max: 1, step: 0,
+    get: () => { const l = ids(); return l.length > 1 ? l.indexOf(K().t[o]) / (l.length - 1) : 0; },
+    show: () => WT.tableName(K().t[o]),
+    set: (v) => { const l = ids(), id = l[Math.round(v * (l.length - 1))]; if (id !== K().t[o]) { editTable(o, id); detail(`${keyName(S.cur)} ${tblLabel(o)} <em>${WT.tableName(id)}</em>${WT.isUser(id) ? ' (your own)' : ''}`); } },
+    reset: () => { if (K().lock) lockedMsg(); else if (K().t[o] !== WT.DEFAULT_TABLE) { editTable(o, WT.DEFAULT_TABLE); detail(`${keyName(S.cur)} ${tblLabel(o)} back to <em>BASIC</em>`); } },
+    lock: { get: () => locked(engOf(S.cur), 'tbl.' + o), toggle: () => toggleLock('tbl.' + o, tblLabel(o)) } });
 }
 const OUT_KNOBS = {
   pan: { label: 'pan', min: -1, max: 1, centre: 0, lr: true, show: panText, dflt: 0 },
@@ -355,10 +385,11 @@ function buildKnobs() {
     let col = 1;
     const sect = (n, cls) => { const el = document.createElement('div'); el.className = 'sect' + (cls || '') + (r ? ' rt' : '') + (col > 1 ? ' sep' : ''); el.style.setProperty('--n', n); cell(el, r + 1, r + 2, col, col + n); col += n; box.append(el); return el; };
     for (const sec of ROWS[r] || []) {
-      const list = sec === 'output' ? ['pan'] : PARAMS.filter((p) => p.sec === sec);
+      const tbl = { 'osc a': 'a', 'osc b': 'b' }[sec];
+      const list = sec === 'output' ? ['pan'] : [...(tbl ? ['table'] : []), ...PARAMS.filter((p) => p.sec === sec)];
       const el = sect(list.length);
       el.innerHTML = `<h3>${sec}</h3><div class="row"></div>`;
-      for (const p of list) { const k = sec === 'output' ? outKnob(p) : paramKnob(p); el.querySelector('.row').append(k.el); knobDraws.push(k.draw); }
+      for (const p of list) { const k = sec === 'output' ? outKnob(p) : p === 'table' ? tableKnob(tbl) : paramKnob(p); el.querySelector('.row').append(k.el); knobDraws.push(k.draw); }
       const g = PART_GATE[sec]; if (g) { const d = () => el.classList.toggle('off', !K().p[g]); gateDraws.push(d); knobDraws.push(d); }
     }
     if (col <= GRID_COLS) sect(GRID_COLS + 1 - col, ' fill');
@@ -374,10 +405,11 @@ function buildKnobs() {
 // ---------------------------------------------------------------------------------------------------------------
 // the key panel: the key, what it plays, the strip of all 25 keys, its buttons and MAKE THIS KEY
 // ---------------------------------------------------------------------------------------------------------------
+const missing = (k) => (!WT.known(k.t.a) && k.p.a_level > 0) || (!WT.known(k.t.b) && k.p.b_level > 0);
 function whatText(k) {
-  const n = editCount(k), edits = n ? ` · ${n} edit${n === 1 ? '' : 's'}` : '';
-  if (k.from === 'base') return `the base sound${edits}`;
-  return `${k.name || 'unnamed'} · ${k.type || k.from}${edits}`;
+  const n = editCount(k), edits = n ? ` · ${n} edit${n === 1 ? '' : 's'}` : '', gone = missing(k) ? ' · table missing' : '';
+  if (k.from === 'base') return `the base sound${edits}${gone}`;
+  return `${k.name || 'unnamed'} · ${k.type || k.from}${edits}${gone}`;
 }
 function drawKeyHead() {
   const k = K(), place = S.cur, note = noteOf(place);
@@ -433,7 +465,7 @@ $('lock-key').addEventListener('click', lockKey);
 $('alter-key').addEventListener('click', () => alterKey());
 let clip = null;
 function copyKey() {
-  const k = K(); clip = structuredClone({ p: k.p, name: k.name, type: k.type, from: k.from });
+  const k = K(); clip = structuredClone({ p: k.p, t: k.t, name: k.name, type: k.type, from: k.from });
   $('paste-key').disabled = K().lock; $('paste-key').title = `Paste ${clip.name || 'the base sound'} onto this key (Cmd+V / Ctrl+V)`;
   detail(`copied <em>${keyName(S.cur)}</em> · pick a key and paste (Cmd+V / Ctrl+V)`);
 }
@@ -447,7 +479,7 @@ function pasteKey() {
 function clearKey() {
   if (K().lock) { lockedMsg(); return; }
   const place = S.cur;
-  change(`CLEAR ${keyName(place)}`, () => { Object.assign(S.keys[place], { p: { ...BASE }, name: '', type: '', from: 'base', o: {}, home: null }); }, `${keyName(place)}: back to the base sound`, place);
+  change(`CLEAR ${keyName(place)}`, () => { Object.assign(S.keys[place], { p: { ...BASE }, t: baseTables(), name: '', type: '', from: 'base', o: {}, home: null }); }, `${keyName(place)}: back to the base sound`, place);
 }
 $('copy-key').addEventListener('click', copyKey);
 $('paste-key').addEventListener('click', pasteKey);
@@ -491,17 +523,19 @@ for (const b of document.querySelectorAll('.srcrow .btn')) b.addEventListener('c
 // a new sound: { p, name, type, from }
 function newSound(type) {
   const src = type ? 'recipe' : source(), t = type || (src === 'recipe' ? RECIPE_TYPES[Math.floor(rnd() * RECIPE_TYPES.length)] : '');
-  return { p: t ? recipe(rnd, t) : free(rnd), name: presetName(rnd), type: t, from: t ? 'recipe' : 'free' };
+  const p = t ? recipe(rnd, t) : free(rnd);
+  return { p, t: pickTables(rnd, t, p), name: presetName(rnd), type: t, from: t ? 'recipe' : 'free' };
 }
 // a new sound onto a key: its locked knobs keep what the key had, its send stays, its pan follows the type
 function deal(place, s) {
   const k = S.keys[place], e = engOf(place), keep = S.locks[e];
   const p = { ...s.p }; for (const id of keep) if (BY_ID[id]) p[id] = k.p[id];
-  Object.assign(k, { p, name: s.name, type: s.type, from: s.from, o: {}, home: null });
+  const t = { a: keep.includes('tbl.a') ? k.t.a : s.t.a, b: keep.includes('tbl.b') ? k.t.b : s.t.b };
+  Object.assign(k, { p, t, name: s.name, type: s.type, from: s.from, o: {}, home: null });
   if (!keep.includes('out.pan')) { const r = panRange(s.type); k.out.pan = Math.round((rnd() * 2 - 1) * r * 100) / 100; }
 }
 const keptNote = (engines) => {
-  const names = [...new Set(engines.flatMap((e) => S.locks[e]).map((id) => (BY_ID[id] ? BY_ID[id].label : id.slice(4)).toUpperCase()))];
+  const names = [...new Set(engines.flatMap((e) => S.locks[e]).map((id) => (BY_ID[id] ? BY_ID[id].label : id.startsWith('tbl.') ? 'table' : id.slice(4)).toUpperCase()))];
   return !names.length ? '' : names.join(', ').length <= 16 ? ` · locked <em>${names.join(', ')}</em> kept` : ` · <em>${names.length} locked knobs</em> kept`;
 };
 const onEngines = () => Array.from({ length: S.engines }, (_, e) => e);
@@ -510,7 +544,7 @@ const placesOf = (e) => { const z = zone(e), o = []; for (let i = z.lo; i <= z.h
 async function change(what, fn, said, playPlace, whole) {
   await startAudio();
   snapshot(what, undefined, whole);
-  fn(); save(); drawAll(); drawLocks(); touch(S.cur);
+  fn(); sendTables(); save(); drawAll(); drawLocks(); touch(S.cur);
   detail(said);
   if (playPlace !== undefined) play(playPlace, 100);
 }
@@ -738,14 +772,15 @@ function deletePreset(id) {
 function exportPresets() {
   if (!presets.length) { detail('nothing saved yet: SAVE keeps this patch, then EXPORT writes the list to a file'); return; }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify({ app: 'metamorf', kind: 'presets', version: 1, items: presets, tables: {} }, null, 1)], { type: 'application/json' }));
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({ app: 'metamorf', kind: 'presets', version: 1, items: presets, tables: WT.embed(presets.flatMap((x) => x.data.keys.flatMap((k) => [k.t.a, k.t.b]))) }, null, 1)], { type: 'application/json' }));
   a.download = `metamorf-presets-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   detail(`exported <em>${presets.length}</em> preset${presets.length === 1 ? '' : 's'} to ${a.download}`);
 }
-function importPresets(text) {
-  let list;
-  try { const j = JSON.parse(text); list = j && j.app === 'metamorf' && j.kind === 'presets' ? j.items : null; } catch (e) { list = null; }
+async function importPresets(text) {
+  let list, tables = 0;
+  try { const j = JSON.parse(text); list = j && j.app === 'metamorf' && j.kind === 'presets' ? j.items : null; if (list) tables = await WT.adopt(j.tables); } catch (e) { list = null; }
+  if (tables) { drawWt(); drawAll(); }
   if (!Array.isArray(list)) { detail('that file has no METAMORF presets in it'); return 0; }
   let added = 0, had = 0;
   for (const raw of list) {
@@ -757,7 +792,8 @@ function importPresets(text) {
     presets.push(p); added++;
   }
   drawPreset();
-  storeOr(added ? `imported <em>${added}</em> preset${added === 1 ? '' : 's'}${had ? ` (${had} already here)` : ''}` : had ? `nothing new: all ${had} are already here` : 'that file has no METAMORF presets in it');
+  const tb = tables ? ` and <em>${tables}</em> wavetable${tables === 1 ? '' : 's'} of your own` : '';
+  storeOr(added ? `imported <em>${added}</em> preset${added === 1 ? '' : 's'}${tb}${had ? ` (${had} already here)` : ''}` : had ? `nothing new: all ${had} are already here${tb}` : 'that file has no METAMORF presets in it');
   return added;
 }
 function drawPreset() {
@@ -869,6 +905,68 @@ function fitScreen() {
 addEventListener('resize', fitScreen);
 
 // ---------------------------------------------------------------------------------------------------------------
+// SETTINGS > WAVETABLES: a WAV file in as a table of your own (kept in this browser), the list, DELETE (X, then SURE?)
+// ---------------------------------------------------------------------------------------------------------------
+let wtArmed = null, wtT = 0;
+const usesOf = (id) => S.keys.filter((k) => (k.t.a === id && k.p.a_level > 0) || (k.t.b === id && k.p.b_level > 0)).length;
+function wtDrawing(u) {
+  const f = Math.floor((u.count - 1) / 2), N = 2048, o = f * N; let d = '';
+  for (let i = 0; i <= 64; i++) { const v = u.frames[o + Math.min(N - 1, Math.round(i * N / 64))]; d += (i ? 'L' : 'M') + i + ' ' + (14 - v * 12).toFixed(1); }
+  return `<svg viewBox="0 0 64 28" preserveAspectRatio="none" aria-hidden="true"><path d="${d}"/></svg>`;
+}
+function drawWt() {
+  const list = $('wt-list'), users = WT.userList(); list.innerHTML = '';
+  $('wt-count').textContent = users.length ? String(users.length) : '';
+  if (!users.length) { list.innerHTML = '<p class="dim">NONE LOADED YET<br>LOAD WAV: ONE CYCLE PER FRAME, UP TO 256 FRAMES</p>'; return; }
+  for (const u of users) {
+    const row = document.createElement('div'); row.className = 'prow';
+    const name = document.createElement('span'); name.className = 'wtname'; name.innerHTML = `${u.name}<small>${u.count} FRAME${u.count === 1 ? '' : 'S'}</small>`;
+    const draw = document.createElement('span'); draw.innerHTML = wtDrawing(u); draw.style.display = 'flex';
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'pdel'; del.textContent = wtArmed === u.id ? 'SURE?' : 'X';
+    del.title = `Delete ${u.name}: press twice`; del.setAttribute('aria-label', `Delete ${u.name}`); del.setAttribute('aria-pressed', wtArmed === u.id);
+    del.addEventListener('click', () => deleteWt(u.id));
+    row.append(name, draw, del); list.append(row);
+  }
+}
+async function deleteWt(id) {
+  const u = WT.user(id); if (!u) return;
+  clearTimeout(wtT);
+  const n = usesOf(id);
+  if (wtArmed !== id) { wtArmed = id; wtT = setTimeout(() => { wtArmed = null; drawWt(); }, 4000); drawWt(); detail(`delete <em>${u.name}</em>? Press its SURE? (it can't be undone)${n ? ` · ${n} key${n === 1 ? ' uses' : 's use'} it` : ''}`); return; }
+  wtArmed = null; await WT.removeUser(id); drawWt(); drawAll();
+  detail(`deleted <em>${u.name}</em>${n ? ` · ${n} key${n === 1 ? '' : 's'} that used it play BASIC now (table missing); loading the same file again brings it back` : ''}`);
+}
+async function keepWt(w, size, file) {
+  $('wt-sizes').hidden = true; file = WT.tableNameFrom(file);
+  try {
+    const { rec, isNew, kept } = await WT.keepWav(w, size, file);
+    drawWt(); drawAll();
+    detail(isNew ? `loaded <em>${rec.name}</em>: ${rec.count} frame${rec.count === 1 ? '' : 's'} · the TABLE knobs can pick it now${kept ? '' : ' · <em>the browser would not keep it</em> (storage full or blocked): it goes when the page closes'}`
+      : `<em>${rec.name}</em> is already loaded (the same frames): nothing added`);
+  } catch (e) { detail(`<em>${file}</em> not loaded: ${e.message}`); }
+}
+function askSize(w, file) {
+  const box = $('wt-sizes'); box.hidden = false; const nm = WT.tableNameFrom(file);
+  box.innerHTML = `<p class="dim">${nm}: ${w.samples.length} SAMPLES. HOW LONG IS ONE CYCLE?</p>`;
+  for (const n of [...SIZES, 0]) {
+    const b = document.createElement('button'); b.type = 'button'; b.tabIndex = -1; b.className = 'btn';
+    const frames = n ? Math.floor(w.samples.length / n) : 1;
+    b.textContent = n ? String(n) : 'WHOLE FILE'; b.disabled = !frames;
+    b.title = n ? `${n} samples a cycle: ${Math.min(256, frames)} frame${frames === 1 ? '' : 's'}` : 'The whole file is one cycle: one frame';
+    b.addEventListener('click', () => keepWt(w, n, file));
+    box.append(b);
+  }
+  detail(`<em>${nm}</em> has no frame size marked: pick how many samples one cycle is (SETTINGS > WAVETABLES)`);
+}
+$('wt-load').addEventListener('click', () => $('wt-file').click());
+$('wt-file').addEventListener('change', async () => {
+  const f = $('wt-file').files[0]; $('wt-file').value = ''; if (!f) return;
+  let w; try { w = decodeWav(await f.arrayBuffer()); } catch (e) { detail(`<em>${WT.tableNameFrom(f.name)}</em> not loaded: ${e.message}`); return; }
+  const size = autoSize(w);
+  if (size) keepWt(w, size, f.name); else askSize(w, f.name);
+});
+
+// ---------------------------------------------------------------------------------------------------------------
 // start
 // ---------------------------------------------------------------------------------------------------------------
 $('start-btn').addEventListener('click', async () => {
@@ -887,11 +985,12 @@ $('bpm').textContent = S.fx.tempo.bpm;
 drawAll(); drawPreset(); randDraws.forEach((d) => d());
 fitScreen();
 document.fonts?.ready.then(alignEngines);
+drawWt(); WT.loadUsers().then((n) => { if (n) { drawWt(); drawAll(); sendTables(); } });
 
 // for testing without a controller: metamorf.noteOn(channel, note, velocity), metamorf.cc(number, value)
 window.metamorf = { noteOn: (ch, note, vel = 100) => noteOn(ch, note, vel), noteOff: (note) => noteOff(note), cc: (cc, val) => onCC(cc, val),
   keys: () => S.keys, cur: () => S.cur, engines: () => S.engines, low: () => S.low, fx: () => S.fx, locks: () => S.locks, rand: () => S.rand,
   presets: { list: () => presets, now: () => S.preset, dirty: presetDirty, import: importPresets }, undoDepth: () => undoStack.length,
   audio: () => ({ state: ctx ? ctx.state : 'none', heard, error: audioError }),
-  render: (place = S.cur, seconds = 1) => renderOffline(S.keys[place].p, S.keys[place].out, 100, seconds) }; // (an offline render of a key, in the Worker)
+  render: (place = S.cur, seconds = 1) => WT.forRender([S.keys[place].t.a, S.keys[place].t.b]).then(() => renderOffline(sound(S.keys[place]), S.keys[place].out, 100, seconds)), tables: () => WT.userList().map((u) => ({ id: u.id, name: u.name, count: u.count })) }; // (an offline render of a key, in the Worker)
 window.metamorfReady = true; // index.html's load check

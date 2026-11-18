@@ -325,10 +325,10 @@ Every knob sits on the shared column positions, lined up with the knobs above an
   5. SYNC: the sound of hard sync at ratios rising from 1 to 8, built band-limited
   6. FOLD: a sine wavefolded with rising gain
   7. BEND: a sine with rising phase distortion, towards a resonant peak
-  8. FORMANT CYCLES: a harmonic spectrum with a peak sweeping up through it
+  8. FORMANT: a harmonic spectrum with a peak sweeping up through it
   9. SPARSE: seeded sets of a few high harmonics (bells and metal, especially with FM)
   10. GRIT: seeded random spectra from smooth to rough (noisy metal when played high)
-  11. STEPS: a sine quantised to fewer and fewer levels
+  11. STEPS: a sine quantised to fewer and fewer levels (the step size changing smoothly, so every frame differs)
   Each built-in table has a stable id (`builtin:basic` …) and its generator is fixed, so a sound sounds the same in every version. Changing a generator means a new id.
 - **User tables from WAV files** (SETTINGS > WAVETABLES: LOAD, a list with name, frame count and a small drawing, DELETE):
   - Accept 8/16/24/32-bit integer and 32-bit float WAV, any sample rate, mono or stereo (summed).
@@ -336,6 +336,7 @@ Every knob sits on the shared column positions, lined up with the knobs above an
   - Remove DC per frame, normalise the table as a whole, and make the frame edges join (a short crossfade where a frame's end doesn't meet its start).
   - Store the decoded table (float frames, name, content hash) in IndexedDB. A sound refers to a user table by its hash; a preset or library export that uses user tables embeds them (base64) so the file works on another computer.
   - A sound whose table is missing plays BASIC instead and the key shows "table missing".
+- **The TABLE knob** (the first knob of OSC A and OSC B) steps through the built-ins, then the user's own tables, and shows the table's name; POSITION reads BASIC's shapes by name and any other table as a percentage. A table is built in the Worker beside the page and sent to the audio thread once; until it arrives a note plays BASIC. FREE picks any built-in for each oscillator; a recipe keeps BASIC most of the time, else picks from its type's own short list (with a new POSITION). A padlock on TABLE keeps it through the randomisers.
 
 ### 4.4 The morph filter: no clicks, no level jumps
 
@@ -469,7 +470,7 @@ All new, with no ties to LXR-AFX's.
 
 - **Sound** (JSON): `{ v: 1, name, group: 'low' | 'mid' | 'midhigh' | 'treble', from, params: { id: number, ... }, mod: { 'lfo>cutoff': number, ... }, tables: { a: ref, a2?: ref, ab?: number, b: ref, ... } }`. Parameters by id (never by position), normalised floats. Unknown ids are ignored; missing ids take their default, so adding parameters later never breaks a sound. `mod` holds only non-zero amounts (normalised -1..+1); a missing amount is zero.
 - **Patch / preset** (JSON): `{ v: 1, name, engines, keys: [ by place in layout: { sound, edits, home, lock, out: { level, pan, send, trim } } ], fx: { reverb, dirt, comp, out }, bpm }`.
-- **Export files**: `{ app: 'metamorf', kind: 'presets' | 'library', version: 1, items: [...], tables: { hash: base64 } }`.
+- **Export files**: `{ app: 'metamorf', kind: 'presets' | 'library', version: 1, items: [...], tables: { 'user:<hash>': { name, count, data: base64 of the float32 frames } } }`.
 - **localStorage**: the live state (`metamorf-v1`), presets (`metamorf-presets-v1`), colours (`metamorf-colours`). **IndexedDB**: user tables, the library, the bins.
 - Sanitise every import (names, labels, ranges, sizes), since messages are shown as HTML.
 

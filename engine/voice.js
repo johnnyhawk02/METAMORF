@@ -1,13 +1,32 @@
 // One engine's voice: a one-shot percussion voice. Pure JS (no DOM, no Web Audio): it renders float buffers at any
 // sample rate, so it runs in the AudioWorklet, in a Worker for offline renders, and in node for the tests.
 //
-// Build step 2: two wavetable oscillators on BASIC (OSC A at the sound's pitch; OSC B at a RATIO of it, DETUNEd, following
+// Two wavetable oscillators, each on its own TABLE (OSC A at the sound's pitch; OSC B at a RATIO of it, DETUNEd, following
 // A's pitch envelope by TRACK), an amp envelope (ATTACK, HOLD, DECAY, CURVE) and a pitch envelope (AMOUNT, DECAY,
 // CURVE). Every parameter glides (a one-pole of about 5 ms on its normalised value) so a knob turned while the note
 // rings never clicks; a new note snaps straight to its own settings. Both phases start at zero on every note and
 // nothing is random, so a sound renders the same every time.
-import { PARAMS, MAPS, levelGain } from '../sound/params.js?v=mwm61gqf';
-import { tables, read } from './tables.js?v=mwm61gqf';
+import { PARAMS, MAPS, levelGain } from '../sound/params.js?v=mwm79h1i';
+import { table, read, DEFAULT_TABLE } from './tables.js?v=mwm79h1i';
+
+// an oscillator's table: the sound names it by id ($a, $b beside the parameters); one this thread doesn't hold plays
+// BASIC (missing: true). A table changed during a note crossfades over 10 ms from the old one, so it never clicks
+class Tab {
+  constructor() { this.t = table(DEFAULT_TABLE); this.old = null; this.x = 1; this.id = DEFAULT_TABLE; this.missing = false; }
+  set(id, now) {
+    id = id || DEFAULT_TABLE; if (id === this.id && !now && !this.missing) return; // (a note start looks again: a table may have arrived)
+    const t = table(id); this.missing = !t; this.id = id;
+    const nt = t || table(DEFAULT_TABLE);
+    if (now) { this.t = nt; this.old = null; this.x = 1; } else if (nt !== this.t) { this.old = this.t; this.t = nt; this.x = 0; }
+  }
+  /** read at pos, phase, hz; step: the crossfade's step per sample */
+  read(pos, phase, hz, fs, step) {
+    const y = read(this.t, pos, phase, hz, fs);
+    if (!this.old) return y;
+    const o = read(this.old, pos, phase, hz, fs), x = this.x; this.x += step; if (this.x >= 1) { this.old = null; this.x = 1; }
+    return o + (y - o) * x;
+  }
+}
 
 const IDS = PARAMS.map((p) => p.id), N = IDS.length;
 const IX = Object.fromEntries(IDS.map((id, i) => [id, i]));
@@ -27,10 +46,11 @@ export class Voice {
     this.out = { level: 0, pan: 0, send: 0, trim: 0 }; this.outT = { level: 0, pan: 0, send: 0, trim: 0 };
     this.glide = 1 - Math.exp(-1 / (0.005 * fs));
     this.minAttack = 0.0003; // ATTACK at 0 is still a ramp of 0.3 ms (a dozen or so samples): no click
-    this.table = tables(); // (BASIC until TABLE comes in build step 3)
+    this.tabA = new Tab(); this.tabB = new Tab(); this.xfStep = 1 / (0.01 * fs);
   }
   /** a new note, at once, with its own settings (normalised params by id, out: the key's level, pan, send, trim) */
   start(params, out, vel, gain = 1) {
+    this.tabA.set(params.$a, true); this.tabB.set(params.$b, true);
     for (let i = 0; i < N; i++) this.cur[i] = this.tgt[i] = params[IDS[i]];
     for (const k of OUTS) this.out[k] = this.outT[k] = out[k];
     this.mapAll();
@@ -40,7 +60,7 @@ export class Voice {
   }
   /** settings changed while the note sounds: glide to them */
   set(params, out) {
-    if (params) for (let i = 0; i < N; i++) { const v = params[IDS[i]]; if (v !== undefined) this.tgt[i] = v; }
+    if (params) { for (let i = 0; i < N; i++) { const v = params[IDS[i]]; if (v !== undefined) this.tgt[i] = v; } if ('$a' in params) this.tabA.set(params.$a, false); if ('$b' in params) this.tabB.set(params.$b, false); }
     if (out) for (const k of OUTS) if (out[k] !== undefined) this.outT[k] = out[k];
     this.moving = true;
   }
@@ -72,11 +92,11 @@ export class Voice {
       const hz = Math.min(BASE_HZ * Math.pow(2, (base + sweep) / 12), top);
       let y = 0;
       const la = r[IX.a_level], lb = r[IX.b_level];
-      if (la > 0) y += read(this.table, r[IX.a_pos], this.phase, hz, fs) * la;
+      if (la > 0) y += this.tabA.read(r[IX.a_pos], this.phase, hz, fs, this.xfStep) * la;
       this.phase += hz / fs; if (this.phase >= 1) this.phase -= Math.floor(this.phase);
       { // (B's phase always runs, so its level turned up mid-note starts in step)
         const hzB = Math.min(BASE_HZ * Math.pow(2, (base + sweep * r[IX.b_track] + r[IX.b_det] / 100) / 12) * r[IX.b_ratio], top);
-        if (lb > 0) y += read(this.table, r[IX.b_pos], this.phaseB, hzB, fs) * lb;
+        if (lb > 0) y += this.tabB.read(r[IX.b_pos], this.phaseB, hzB, fs, this.xfStep) * lb;
         this.phaseB += hzB / fs; if (this.phaseB >= 1) this.phaseB -= Math.floor(this.phaseB);
       }
       y *= this.env;

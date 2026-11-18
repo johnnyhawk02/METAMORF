@@ -5,11 +5,13 @@
 //
 // The copies are sized for their harmonics, not one size for all: the full-band copy has 4096 harmonics (a note at
 // 4 Hz still reaches 16 kHz, so low notes keep their highs). Every copy holds 8 samples per harmonic and is read with
-// 6-point Lagrange interpolation: its images (which would alias) stay under -75 dB, its droop under 0.1 dB.
+// 6-point Lagrange interpolation: its images (which would alias) stay under -75 dB, its droop under 0.1 dB. A table
+// whose frames stop at a few harmonics shares one copy for every octave that holds them all, so it costs little.
 //
-// Build step 2 has BASIC only (sine > triangle > saw > square > narrow pulse), made from the textbook Fourier series
-// of each shape. The other built-in tables and WAV loading come in build step 3. Pure JS: it runs in the AudioWorklet,
-// a Worker and node.
+// The built-in tables are made from maths (Fourier series, or one cycle of a shape drawn finely and measured with an
+// FFT), never shipped as samples; each has a stable id and its maker never changes (a change is a new id). User
+// tables come from WAV files (app/wav.js) as frames of FRAME samples. Pure JS: it runs in the AudioWorklet, a Worker
+// and node. A table is plain data ({ id, name, frames, size, data }), so it can be posted between threads.
 
 export const TOP_H = 4096, LEVELS = 13; // copies hold 4096, 2048, ... 1 harmonics
 const G = 5; // (guard samples per frame)
@@ -38,27 +40,54 @@ export { fft };
 
 /**
  * A table from spectra. Each frame's spectrum is { a, b }: Float64Arrays of cosine and sine amounts by harmonic
- * (index 1..TOP_H; index 0, the DC, is ignored). Every frame is scaled so its full-band copy peaks at 1, and every
- * copy of a frame takes the same scale, so a sweep across octaves doesn't change the level.
- * Returns { name, frames, data, size }: data[l] is one Float32Array of frames * (size[l] + G) samples: each frame
- * with two guard samples before it (its last two) and three after (its first three), so reading needs no wrap.
+ * (index 1..; index 0, the DC, is ignored). Every frame is scaled so its full-band copy peaks at 1, and every copy of
+ * a frame takes the same scale, so a sweep across octaves doesn't change the level.
+ * Returns { id, name, frames, data, size }: data[l] is one Float32Array of frames * (size[l] + G) samples: each frame
+ * with two guard samples before it (its last two) and three after (its first three), so reading needs no wrap. The
+ * copies for octaves that hold every harmonic the table has are one shared copy.
  */
-export function buildTable(name, spectra) {
-  const F = spectra.length, size = Array.from({ length: LEVELS }, (_, l) => copySize(l));
-  const data = size.map((N) => new Float32Array(F * (N + G)));
+export function buildTable(id, name, spectra) {
+  const F = spectra.length;
+  // the table's highest harmonic that matters (over -120 dB of its strongest)
+  let top = 1, big = 0;
+  for (const { a, b } of spectra) for (let k = 1; k < a.length; k++) big = Math.max(big, Math.hypot(a[k], b[k]));
+  for (const { a, b } of spectra) for (let k = a.length - 1; k > top; k--) if (Math.hypot(a[k], b[k]) > big * 1e-6) { top = k; break; }
+  let share = 0; while (share < LEVELS - 1 && (TOP_H >> (share + 1)) >= top) share++; // copies 0..share all hold every harmonic
+  const size = Array.from({ length: LEVELS }, (_, l) => copySize(Math.max(l, share)));
+  const data = []; for (let l = 0; l < LEVELS; l++) data.push(l < share ? null : new Float32Array(F * (size[l] + G)));
   for (let f = 0; f < F; f++) {
     const { a, b } = spectra[f]; let scale = 1;
-    for (let l = 0; l < LEVELS; l++) {
-      const N = size[l], re = new Float64Array(N), im = new Float64Array(N), top = Math.min(TOP_H >> l, a.length - 1, N / 2 - 1);
-      for (let k = 1; k <= top; k++) { re[k] = a[k] / 2; im[k] = -b[k] / 2; re[N - k] = a[k] / 2; im[N - k] = b[k] / 2; }
+    for (let l = share; l < LEVELS; l++) {
+      const N = size[l], re = new Float64Array(N), im = new Float64Array(N), lim = Math.min(TOP_H >> l, a.length - 1, N / 2 - 1);
+      for (let k = 1; k <= lim; k++) { re[k] = a[k] / 2; im[k] = -b[k] / 2; re[N - k] = a[k] / 2; im[N - k] = b[k] / 2; }
       fft(re, im, 1);
-      if (l === 0) { let m = 0; for (let i = 0; i < N; i++) m = Math.max(m, Math.abs(re[i])); scale = m > 1e-9 ? 1 / m : 1; }
+      if (l === share) { let m = 0; for (let i = 0; i < N; i++) m = Math.max(m, Math.abs(re[i])); scale = m > 1e-9 ? 1 / m : 1; }
       const d = data[l], o = f * (N + G) + 2;
       for (let i = 0; i < N; i++) d[o + i] = re[i] * scale;
       d[o - 2] = d[o + N - 2]; d[o - 1] = d[o + N - 1]; d[o + N] = d[o]; d[o + N + 1] = d[o + 1]; d[o + N + 2] = d[o + 2];
     }
   }
-  return { name, frames: F, data, size };
+  for (let l = 0; l < share; l++) data[l] = data[share];
+  return { id, name, frames: F, data, size };
+}
+/** the number of bytes a table holds (shared copies counted once) */
+export const tableBytes = (t) => [...new Set(t.data)].reduce((s, d) => s + d.byteLength, 0);
+
+/** a spectrum ({ a, b } up to TOP_H) from one cycle of a shape, drawn at M points (DC dropped) */
+export function measure(wave, M = 1 << 16) {
+  const re = new Float64Array(M), im = new Float64Array(M);
+  for (let i = 0; i < M; i++) re[i] = wave(i / M);
+  fft(re, im, -1);
+  const a = new Float64Array(TOP_H + 1), b = new Float64Array(TOP_H + 1);
+  for (let k = 1; k <= TOP_H; k++) { a[k] = 2 * re[k] / M; b[k] = -2 * im[k] / M; }
+  return { a, b };
+}
+/** a spectrum from one frame of samples (a power of two long: a WAV frame of FRAME), harmonics up to half its length */
+export function measureFrame(x) {
+  const M = x.length, re = Float64Array.from(x), im = new Float64Array(M); fft(re, im, -1);
+  const H = Math.min(TOP_H, M / 2 - 1), a = new Float64Array(H + 1), b = new Float64Array(H + 1);
+  for (let k = 1; k <= H; k++) { a[k] = 2 * re[k] / M; b[k] = -2 * im[k] / M; }
+  return { a, b };
 }
 
 // ---- the shapes of BASIC, as Fourier series (cosine a_k, sine b_k) ----
@@ -73,17 +102,69 @@ const SHAPES = {
 };
 const mix = (p, q, t) => ({ a: p.a.map((v, k) => v + (q.a[k] - v) * t), b: p.b.map((v, k) => v + (q.b[k] - v) * t) });
 
+const range = (n, f) => Array.from({ length: n }, (_, i) => f(i / (n - 1), i));
+const harmonics = (H, amp) => spec((k) => 0, (k) => (k <= H ? amp(k) : 0));
+// a seeded generator (xorshift), so a seeded table is the same everywhere, every time
+const seeded = (s) => () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
+const TAU = 2 * Math.PI;
+
 /** BASIC: sine > triangle > saw > square > narrow pulse, in 41 frames (10 between each pair of shapes) */
-export function basic() {
+function basicSpectra() {
   const keys = [SHAPES.sine(), SHAPES.triangle(), SHAPES.saw(), SHAPES.pulse(0.5)], frames = [];
   for (let s = 0; s < 3; s++) for (let i = 0; i < 10; i++) frames.push(mix(keys[s], keys[s + 1], i / 10));
   for (let i = 0; i <= 10; i++) frames.push(SHAPES.pulse(0.5 - 0.45 * i / 10)); // the square narrowing to a 5% pulse
-  return buildTable('BASIC', frames);
+  return frames;
 }
 
-let BASIC = null;
-/** the built-in tables, made once per thread */
-export const tables = () => (BASIC ||= basic());
+// The built-in tables: [id, name, maker of the frames' spectra]. The ids never change; a changed maker is a new id.
+export const BUILTINS = [
+  ['builtin:basic', 'BASIC', basicSpectra],
+  // a sine, then harmonics added one at a time (falling gently, as 1/k^0.7), up to 32
+  ['builtin:harmonics', 'HARMONICS', () => range(32, (t, i) => harmonics(i + 1, (k) => Math.pow(k, -0.7)))],
+  // odd harmonics building up (hollow, woody), up to the 63rd
+  ['builtin:odd', 'ODD', () => range(32, (t, i) => harmonics(2 * i + 1, (k) => (k % 2 ? 1 / k : 0)))],
+  // a pulse narrowing from 50% to 2%
+  ['builtin:pulse', 'PULSE', () => range(33, (t) => SHAPES.pulse(0.5 - 0.48 * t))],
+  // hard sync: a sine restarted every cycle at ratios rising from 1 to 8 (its frequency as a smooth curve, so the
+  // sweep is even in pitch), measured with every harmonic up to TOP_H
+  ['builtin:sync', 'SYNC', () => range(33, (t) => { const r = Math.pow(8, t); return measure((x) => Math.sin(TAU * r * x)); })],
+  // a sine folded back on itself as its gain rises from 1 to 8 (a triangle fold: smooth corners, no clipping)
+  ['builtin:fold', 'FOLD', () => range(33, (t) => { const g = 1 + 7 * t; return measure((x) => { const v = g * Math.sin(TAU * x), u = (v + 1) / 4; return 1 - 4 * Math.abs(u - Math.floor(u + 0.5)); }); })],
+  // phase distortion: a cosine whose first half-cycle is squeezed into a shorter and shorter part of the cycle, a
+  // resonant peak forming
+  ['builtin:bend', 'BEND', () => range(33, (t) => { const d = 0.5 - 0.47 * t; return measure((x) => -Math.cos(Math.PI * (x < d ? x / d : 1 + (x - d) / (1 - d)))); })],
+  // a harmonic spectrum (1/sqrt k) with a peak sweeping up through it, from the 1st harmonic to the 48th
+  ['builtin:formant', 'FORMANT', () => range(33, (t) => { const c = 1 + 47 * t, w = 1.5 + 3 * t; return harmonics(64, (k) => Math.pow(k, -0.5) * (0.15 + Math.exp(-(((k - c) / w) ** 2)))); })],
+  // a few high harmonics, seeded, a new set every frame (bells and metal, especially with FM)
+  ['builtin:sparse', 'SPARSE', () => { const rnd = seeded(91); return range(33, (t) => { const o = spec(() => 0, () => 0); o.b[1] = 0.5; for (let n = 0; n < 4; n++) { const k = 2 + Math.floor(rnd() * (6 + 50 * t)); o.b[k] += 0.3 + 0.7 * rnd(); } return o; }); }],
+  // seeded random spectra, from smooth (falling fast, little jitter) to rough (flat, every harmonic random)
+  ['builtin:grit', 'GRIT', () => { const rnd = seeded(23), ph = Array.from({ length: TOP_H + 1 }, () => rnd() * TAU), j = Array.from({ length: TOP_H + 1 }, () => rnd());
+    return range(33, (t) => { const p = 2 - 1.5 * t; return spec((k) => Math.pow(k, -p) * (1 - t + 2 * t * j[k]) * Math.cos(ph[k]), (k) => Math.pow(k, -p) * (1 - t + 2 * t * j[k]) * Math.sin(ph[k])); }); }],
+  // a sine quantised to fewer and fewer steps, from 64 levels to 2 (the step size changing smoothly, so every frame
+  // differs)
+  ['builtin:steps', 'STEPS', () => range(33, (t) => { const n = Math.pow(2, 6 - 5 * t); return measure((x) => Math.round(Math.sin(TAU * x) * n) / n); })],
+];
+export const BUILTIN_IDS = BUILTINS.map((b) => b[0]);
+export const DEFAULT_TABLE = 'builtin:basic';
+
+/** build a built-in table (about 0.05 to 0.3 s each) */
+export function builtin(id) { const b = BUILTINS.find((x) => x[0] === id); return b ? buildTable(b[0], b[1], b[2]()) : null; }
+/** BASIC, built (kept for the tests) */
+export const basic = () => builtin('builtin:basic');
+
+/** a user table from frames of samples (each a power of two long; app/wav.js gives FRAME) */
+export const fromFrames = (id, name, frames) => buildTable(id, name, frames.map(measureFrame));
+
+// the tables this thread holds, by id. BASIC is always there (the fallback for a table not here yet, or missing)
+const HELD = new Map();
+export function table(id) { let t = HELD.get(id); if (t) return t; if (id === DEFAULT_TABLE || !id) { t = basic(); HELD.set(DEFAULT_TABLE, t); return t; } return null; }
+export const hold = (t) => { HELD.set(t.id, t); };
+export const holds = (id) => HELD.has(id);
+export const drop = (id) => { if (id !== DEFAULT_TABLE) HELD.delete(id); };
+/** a built-in table, built here if this thread doesn't hold it yet */
+export function need(id) { if (!HELD.has(id)) { const t = builtin(id); if (t) HELD.set(id, t); } return table(id); }
+/** the old name (build step 2): BASIC */
+export const tables = () => table(DEFAULT_TABLE);
 
 // 6-point Lagrange interpolation between d[o] and d[o + 1] (the samples at -2..3 around o), at fraction f: the
 // weights for f first (weights(f)), then the sum (lagrange(d, o))
