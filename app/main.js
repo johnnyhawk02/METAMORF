@@ -2,17 +2,18 @@
 // knobs edit the key played last. The sound engine is in engine/ and sound/ (no UI there); the controls, colours and
 // phone view are in this folder.
 import { PARAMS, BY_ID, SECTIONS, BASE, OUT_DEFAULT, TYPES, KEYS, MAX_ENGINES, DEFAULT_ENGINES, DEFAULT_LOW, isBip, showValue, fullParams, clampN,
-  levelText, panText, sendText, panRange, engineOf, zoneOf, validRoute, MOD_SOURCES, MOD_NAMES, modDepth, routeKey, modulatable } from '../sound/params.js?v=mwm8ui4x';
-import { free, recipe, alter, pickTables, pickRoutes, alterRoutes, RECIPE_TYPES } from '../sound/makers.js?v=mwm8ui4x';
-import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm8ui4x';
-import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm8ui4x';
-import { presetName } from './names.js?v=mwm8ui4x';
-import { $, clamp, hbar, knob, dragger, makeDice, DIE_SVG } from './controls.js?v=mwm8ui4x';
-import { setupColours } from './colours.js?v=mwm8ui4x';
-import { setupPhone } from './phone.js?v=mwm8ui4x';
-import { render as renderOffline } from './offline.js?v=mwm8ui4x';
-import * as WT from './wavetables.js?v=mwm8ui4x';
-import { decodeWav, autoSize, SIZES } from './wav.js?v=mwm8ui4x';
+  levelText, panText, sendText, panRange, engineOf, zoneOf, validRoute, MOD_SOURCES, MOD_NAMES, modDepth, routeKey, modulatable } from '../sound/params.js?v=mwm930re';
+import { free, recipe, alter, pickTables, pickRoutes, alterRoutes, RECIPE_TYPES } from '../sound/makers.js?v=mwm930re';
+import { sizeScale, decaySec, toneHz } from '../engine/reverb.js?v=mwm930re';
+import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm930re';
+import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm930re';
+import { presetName } from './names.js?v=mwm930re';
+import { $, clamp, hbar, knob, dragger, makeDice, DIE_SVG } from './controls.js?v=mwm930re';
+import { setupColours } from './colours.js?v=mwm930re';
+import { setupPhone } from './phone.js?v=mwm930re';
+import { render as renderOffline } from './offline.js?v=mwm930re';
+import * as WT from './wavetables.js?v=mwm930re';
+import { decodeWav, autoSize, SIZES } from './wav.js?v=mwm930re';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2); // C3 = 60
@@ -56,10 +57,12 @@ function tidyKey(k) {
     out: { level: num(out.level, 0, 1, OUT_DEFAULT.level), pan: num(out.pan, -1, 1, 0), send: num(out.send, 0, 1, 0), trim: num(out.trim, -16, 12, 0) } };
 }
 const FX_MAX = { dirt: { on: 1, pregain: 48, cutoff: 127, swap: 1, xover: 1, gain: 127, clip: 1, bass: 24, tone: 127, dirty: 127, clean: 127, sc: 1, src: 4, scfilt: 2, freq: 127, sens: 127, decay: 127, dir: 1, target: 2 },
+  reverb: { size: 127, decay: 127, tone: 127, early: 127, pre: 100, width: 100 }, comp: { thresh: 40, ratio: 200, attack: 100, release: 1000, knee: 24, makeup: 24 },
   master: { level: 100 } };
+const FX_MIN = { comp: { ratio: 10, attack: 1, release: 10 } };
 function tidyFx(fx) {
   const o = structuredClone(FX_DEFAULTS);
-  for (const k in FX_MAX) for (const f in FX_MAX[k]) if (fx && fx[k] && Number.isFinite(Number(fx[k][f]))) o[k][f] = clamp(Math.round(Number(fx[k][f])), 0, FX_MAX[k][f]);
+  for (const k in FX_MAX) for (const f in FX_MAX[k]) if (fx && fx[k] && Number.isFinite(Number(fx[k][f]))) o[k][f] = clamp(Math.round(Number(fx[k][f])), FX_MIN[k]?.[f] ?? 0, FX_MAX[k][f]);
   return o;
 }
 try {
@@ -103,10 +106,10 @@ const send = (m) => { if (node) node.port.postMessage(m); };
 async function startAudio() {
   if (ctx) { if (ctx.state !== 'running') await ctx.resume(); return; }
   ctx = new AudioContext({ latencyHint: 'interactive' });
-  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm8ui4x', import.meta.url));
+  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm930re', import.meta.url));
   node = new AudioWorkletNode(ctx, 'metamorf', { numberOfInputs: 0, outputChannelCount: [2] });
   WT.attach((m) => send(m), () => drawKnobs());
-  node.port.onmessage = (e) => { if (e.data.type === 'peaks') { heard = Math.max(heard, ...e.data.peaks); showPeaks(e.data.peaks); showSc(e.data.sc || 0); } };
+  node.port.onmessage = (e) => { if (e.data.type === 'peaks') { heard = Math.max(heard, ...e.data.peaks); showPeaks(e.data.peaks); showSc(e.data.sc || 0); showGr(e.data.gr || 0); } };
   // (the sound engine failed on the audio thread: say so, rather than play silence)
   node.onprocessorerror = () => { audioError = 'the sound engine stopped'; detail('<em>no sound</em>: the sound engine stopped with an error. Reload the page; if it keeps happening, tell Claude'); };
   node.connect(ctx.destination);
@@ -321,6 +324,8 @@ const showLast = (place, vel) => showLastText(`${keyName(place)} #${noteOf(place
 function flash(e) { const led = engBtns[e]?.querySelector('i'); if (!led) return; led.classList.add('on'); clearTimeout(led._t); led._t = setTimeout(() => led.classList.remove('on'), 90); }
 const showPeaks = (peaks) => peaks.forEach((p, e) => { if (p > 0.02) flash(e); });
 let scShown = 0;
+let grShown = 0;
+function showGr(db) { grShown = Math.max(db, grShown * 0.85); const n = Math.round(Math.min(1, grShown / 24) * 16); document.querySelectorAll('.grm .segs i').forEach((x, i) => x.classList.toggle('on', i < n)); const o = document.querySelector('.grm output'); if (o) o.textContent = (grShown > 0.05 ? '-' : '') + grShown.toFixed(1) + 'dB'; }
 function showSc(v) { scShown = Math.max(v, scShown * 0.8); const n = Math.round(Math.min(1, scShown) * 12); document.querySelectorAll('.envm .segs i').forEach((x, i) => x.classList.toggle('on', i < n)); }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -481,7 +486,7 @@ const OUT_KNOBS = {
 function outKnob(f) {
   const d = OUT_KNOBS[f];
   return knob({ ...d, get: () => K().out[f],
-    set: (v) => { editOut(f, v); detail(`${keyName(S.cur)} ${d.label.toUpperCase()} <em>${d.show(v)}</em>${f === 'send' ? ' · the reverb arrives in build step 8' : ''}`); },
+    set: (v) => { editOut(f, v); detail(`${keyName(S.cur)} ${d.label.toUpperCase()} <em>${d.show(v)}</em>`); },
     reset: () => { if (K().lock) lockedMsg(); else editOut(f, d.dflt); },
     lock: { get: () => locked(engOf(S.cur), 'out.' + f), toggle: () => toggleLock('out.' + f, d.label.toUpperCase()) },
     learn: { t: 'out', k: f } });
@@ -749,14 +754,14 @@ document.addEventListener('pointerdown', (e) => {
 setupColours(detail);
 
 // ---------------------------------------------------------------------------------------------------------------
-// FX + MASTER: the master distortion (sound/dirt.js) with its sidechain, and the output level. (The reverb and the
-// compressor come in build step 8.)
+// FX + MASTER: the send reverb (engine/reverb.js), the master distortion (sound/dirt.js) with its sidechain, the
+// compressor (engine/comp.js) with its gain-reduction meter, and the output level (docs/SPEC.md section 5)
 // ---------------------------------------------------------------------------------------------------------------
 const hz = (f) => (f < 1000 ? Math.round(f) + 'Hz' : (f / 1000).toFixed(f < 9950 ? 1 : 0) + 'k');
 const sdb = (d) => (d > 0 ? '+' : '') + Math.round(d) + 'dB';
 let fxDraws = [];
 function applyFx(fx) {
-  for (const k of ['dirt', 'master', 'tempo']) if (fx[k]) Object.assign(S.fx[k], fx[k]);
+  for (const k of ['dirt', 'reverb', 'comp', 'master', 'tempo']) if (fx[k]) Object.assign(S.fx[k], fx[k]);
   $('bpm').textContent = S.fx.tempo.bpm; drawRet(); sendFx(); fxDraws.forEach((d) => d());
 }
 function buildFx() {
@@ -805,6 +810,19 @@ function buildFx() {
   c1.append(dist, side);
   const out = document.createElement('div'); out.className = 'sect mout'; out.style.setProperty('--n', 1); out.innerHTML = '<h3>OUTPUT</h3><div class="row"></div>';
   out.querySelector('.row').append(gk('level', { max: 100, show: (v) => v + '%', get: () => S.fx.master.level, set: (v) => { S.fx.master.level = v; sendFx(); detail(`OUTPUT LEVEL <em>${v}%</em>`); }, reset: () => { S.fx.master.level = FX_DEFAULTS.master.level; sendFx(); } }));
+  // the reverb: every key's REVERB send goes here, and comes back before the master
+  const V = S.fx.reverb, vk = (k, label, max, show) => gk(label, { max, show, get: () => V[k], set: (v) => { V[k] = v; sendFx(); detail(`REVERB ${label.toUpperCase()} <em>${show(v)}</em>`); }, reset: () => { V[k] = FX_DEFAULTS.reverb[k]; sendFx(); } });
+  const verb = sect(6, [[vk('size', 'size', 127, (v) => Math.round(sizeScale(v) * 100) + '%'), vk('decay', 'decay', 127, (v) => { const t = decaySec(v); return t < 10 ? t.toFixed(t < 1 ? 2 : 1) + 's' : '10s'; }),
+    vk('tone', 'tone', 127, (v) => hz(toneHz(v))), vk('early', 'early', 127, (v) => Math.round(v / 127 * 100) + '%'), vk('pre', 'pre-delay', 100, (v) => v + 'ms'), vk('width', 'width', 100, (v) => v + '%')]]);
+  verb.querySelector('h3').innerHTML = '<span class="t">REVERB</span><span class="dim">EACH KEY SENDS TO IT</span>';
+  // the compressor: THRESHOLD 0 is off
+  const C = S.fx.comp, ck = (k, label, min, max, show) => gk(label, { min, max, show, get: () => C[k], set: (v) => { C[k] = v; sendFx(); drawComp(); detail(`COMPRESSOR ${label.toUpperCase()} <em>${show(v)}</em>${k === 'thresh' && !v ? ' · the compressor is off' : ''}`); }, reset: () => { C[k] = FX_DEFAULTS.comp[k]; sendFx(); drawComp(); } });
+  const gr = document.createElement('div'); gr.className = 'grm'; gr.innerHTML = `<span class="lab">GAIN REDUCTION</span><div class="segs">${'<i></i>'.repeat(16)}</div><output>0.0dB</output>`;
+  const comp = sect(6, [[ck('thresh', 'threshold', 0, 40, (v) => (v ? '-' + v + 'dB' : 'OFF')), ck('ratio', 'ratio', 10, 200, (v) => (v / 10).toFixed(v < 100 ? 1 : 0) + ':1'),
+    ck('attack', 'attack', 1, 100, (v) => v + 'ms'), ck('release', 'release', 10, 1000, (v) => (v < 1000 ? v + 'ms' : '1.0s')), ck('knee', 'knee', 0, 24, (v) => v + 'dB'), ck('makeup', 'makeup', 0, 24, (v) => '+' + v + 'dB')], [gr]]);
+  comp.querySelector('h3').innerHTML = '<span class="t">COMPRESSOR</span><span class="dim">THRESHOLD 0: OFF</span>';
+  const drawComp = () => comp.classList.toggle('off', !C.thresh); fxDraws.push(drawComp);
+  c2.prepend(verb, comp);
   c2.append(out);
   fxDraws.forEach((d) => d());
 }
@@ -1112,7 +1130,7 @@ document.fonts?.ready.then(alignEngines);
 drawWt(); WT.loadUsers().then((n) => { if (n) { drawWt(); drawAll(); sendTables(); } });
 
 // for testing without a controller: metamorf.noteOn(channel, note, velocity), metamorf.cc(number, value)
-window.metamorf = { redraw: () => drawAll(), noteOn: (ch, note, vel = 100) => noteOn(ch, note, vel), noteOff: (note) => noteOff(note), cc: (cc, val) => onCC(cc, val),
+window.metamorf = { redraw: () => drawAll(), fx: () => S.fx, noteOn: (ch, note, vel = 100) => noteOn(ch, note, vel), noteOff: (note) => noteOff(note), cc: (cc, val) => onCC(cc, val),
   keys: () => S.keys, cur: () => S.cur, engines: () => S.engines, low: () => S.low, fx: () => S.fx, locks: () => S.locks, rand: () => S.rand,
   presets: { list: () => presets, now: () => S.preset, dirty: presetDirty, import: importPresets }, undoDepth: () => undoStack.length,
   audio: () => ({ state: ctx ? ctx.state : 'none', heard, error: audioError }),

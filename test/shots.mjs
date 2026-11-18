@@ -169,6 +169,13 @@ for (const [w, h] of [[1440, 900], [1280, 800], [1440, 760], [1280, 700]]) {
   await p.keyboard.press('f'); await p.waitForTimeout(100);
   { const s = await M(() => [document.getElementById('fxside').hidden, document.querySelector('.editor').hidden, document.querySelectorAll('#fxglobal .knob').length]);
     if (s[0] || !s[1] || s[2] < 10) bad('the FX tab', s);
+    // the reverb and the compressor (build step 8): their knobs, the meter; a knob turned is sent and said
+    const fx = await M(() => ({ labs: [...document.querySelectorAll('#fxglobal .vf .lab')].map((e) => e.textContent), grm: !!document.querySelector('#fxglobal .grm .segs') }));
+    const want = ['size', 'decay', 'tone', 'early', 'pre-delay', 'width', 'threshold', 'ratio', 'attack', 'release', 'knee', 'makeup'];
+    if (!want.every((l) => fx.labs.includes(l)) || !fx.grm) bad('the reverb and compressor knobs', fx);
+    await drag('#fxglobal .vf:has(.lab:text-is("threshold")) .knob', true, 60);
+    const c = await M(() => [metamorf.fx().comp.thresh, document.getElementById('detail').textContent]);
+    if (!(c[0] > 0) || !/COMPRESSOR THRESHOLD -\d+dB/.test(c[1])) bad('the compressor THRESHOLD knob', c);
     const lay2 = await M(() => [document.documentElement.scrollWidth - innerWidth, document.documentElement.scrollHeight - innerHeight]); if (lay2[0] > 0 || lay2[1] > 0) bad('the FX tab scrolls', lay2); }
   if (w === 1440 && h === 900 || w === 1280 && h === 700) await p.screenshot({ path: `${out}/fx-${w}x${h}.png` });
   await p.keyboard.press('f');

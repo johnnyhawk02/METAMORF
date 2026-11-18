@@ -656,3 +656,7 @@ html.phone .pv { position: relative; display: grid; grid-template-columns: repea
 .knob .marc { fill: none; stroke: var(--ink); stroke-width: 2.4; stroke-linecap: butt; }
 .knob .md { fill: var(--ink); display: none; }
 .knob .md.on { display: inline; }
+/* the compressor's gain-reduction meter: across its section's second row */
+.fxcol .sect .row .grm { grid-column: 1 / -1; grid-template-columns: auto 1fr 4.6em; align-items: center; gap: 10px; margin: 6px 8px 0; }
+.fxcol .sect .row .grm output { text-align: right; }
+.fxcol .sect.off .row .vf { opacity: .5; }

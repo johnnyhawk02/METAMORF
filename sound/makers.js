@@ -3,8 +3,8 @@
 // Build step 1 has the ones that need no kept sounds: FREE (every parameter anywhere in its safe range), the starter
 // recipes (a sound of a named type, hand-tuned ranges for the stub voice) and ALTER (a nudge around a sound's home).
 // LIBRARY, BREED, MORPH, STYLE and the learned recipes come with the library (build steps 10 and 11).
-import { PARAMS, BY_ID, isBip, MOD_ROUTES, MOD_SOURCES, routeKey, validRoute } from './params.js?v=mwm8ui4x';
-import { BUILTIN_IDS } from '../engine/tables.js?v=mwm8ui4x';
+import { PARAMS, BY_ID, isBip, MOD_ROUTES, MOD_SOURCES, routeKey, validRoute } from './params.js?v=mwm930re';
+import { BUILTIN_IDS } from '../engine/tables.js?v=mwm930re';
 
 const pick = (rnd, [lo, hi]) => lo + rnd() * (hi - lo);
 const lim = (p) => [isBip(p) ? -1 : 0, 1];
