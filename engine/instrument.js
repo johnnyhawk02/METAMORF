@@ -1,15 +1,18 @@
-// The instrument: 1 to 4 mono engines, then the master (the distortion, the output level and a safety limiter).
+// The instrument: 1 to 4 mono engines and the send reverb, then the master: the distortion, the compressor, the output
+// level and a safety limiter (docs/SPEC.md section 5).
 // Pure JS: render(L, R) fills float buffers at any rate, in the AudioWorklet, a Worker or node.
 //
 // Each engine plays one note at a time: a new note fades the old one out over 3 ms while it starts. A note coming back
 // (RETURN: the zone going back to an earlier held key) starts on the next step of the BPM grid. The reverb send is
-// collected per engine already; the reverb itself and the compressor come in build step 8.
-import { Voice } from './voice.js?v=mwm8ui4x';
-import { Dirt, DIRT_DEFAULTS } from '../sound/dirt.js?v=mwm8ui4x';
+// collected from every voice and returned at unity before the master.
+import { Voice } from './voice.js?v=mwm930re';
+import { Reverb, REVERB_DEFAULTS } from './reverb.js?v=mwm930re';
+import { Comp, COMP_DEFAULTS } from './comp.js?v=mwm930re';
+import { Dirt, DIRT_DEFAULTS } from '../sound/dirt.js?v=mwm930re';
 
 export const MASTER_DEFAULTS = { level: 80 };
 export const TEMPO_DEFAULTS = { bpm: 120, ret: 2 };
-export const FX_DEFAULTS = { dirt: { ...DIRT_DEFAULTS }, master: { ...MASTER_DEFAULTS }, tempo: { ...TEMPO_DEFAULTS } };
+export const FX_DEFAULTS = { dirt: { ...DIRT_DEFAULTS }, reverb: { ...REVERB_DEFAULTS }, comp: { ...COMP_DEFAULTS }, master: { ...MASTER_DEFAULTS }, tempo: { ...TEMPO_DEFAULTS } };
 // RETURN's steps, in beats: NOW, 1/32, 1/16, 1/8, 1/4
 export const RETURN_BEATS = [0, 0.125, 0.25, 0.5, 1];
 export const masterGain = (v) => (v / 80) * (v / 80); // OUTPUT LEVEL 80% is unity
@@ -25,7 +28,7 @@ export class Instrument {
   constructor(fs, block = 128) {
     this.fs = fs; this.n = 4; this.clock = 0;
     this.eng = [0, 1, 2, 3].map(() => new Engine(fs));
-    this.dirt = new Dirt(fs);
+    this.dirt = new Dirt(fs); this.verb = new Reverb(fs); this.comp = new Comp(fs);
     this.fx = JSON.parse(JSON.stringify(FX_DEFAULTS)); // (structuredClone is not there on the audio thread)
     this.gain = masterGain(this.fx.master.level); this.glide = 1 - Math.exp(-1 / (0.01 * fs));
     this.alloc(block);
@@ -61,7 +64,7 @@ export class Instrument {
   }
   setFx(fx) {
     for (const k in fx) if (this.fx[k] && fx[k]) Object.assign(this.fx[k], fx[k]);
-    this.dirt.set(this.fx.dirt);
+    this.dirt.set(this.fx.dirt); this.verb.set(this.fx.reverb); this.comp.set(this.fx.comp);
   }
   /** fill L and R (zeroed here) with the next block; returns nothing, peaks are in eng[e].peak */
   render(L, R) {
@@ -79,8 +82,11 @@ export class Instrument {
       E.peak = Math.max(E.peak, pk);
       for (let i = 0; i < n; i++) { L[i] += EL[i]; R[i] += ER[i]; }
     }
-    // the master: the distortion (its sidechain hears the mix, or one engine), the output level, the limiter
+    // the reverb's return, then the master: the distortion (its sidechain hears the mix, or one engine), the
+    // compressor, the output level, the limiter
+    this.verb.process(this.SL, this.SR, L, R, n);
     if (this.dirt.active) { const src = this.fx.dirt.src | 0; this.dirt.process(L.subarray(0, n), R.subarray(0, n), src > 0 ? this.EL[src - 1].subarray(0, n) : null); }
+    this.comp.process(L, R, n);
     const to = masterGain(this.fx.master.level), g = this.glide;
     for (let i = 0; i < n; i++) { this.gain += (to - this.gain) * g; L[i] = limit(L[i] * this.gain); R[i] = limit(R[i] * this.gain); }
     this.clock += n;
@@ -88,4 +94,5 @@ export class Instrument {
   /** the engines' peaks since the last call */
   readPeaks() { return this.eng.map((E) => { const p = E.peak; E.peak = 0; return p; }); }
   readSc() { return this.dirt.readEnv(); }
+  readGr() { return this.comp.readGr(); }
 }
