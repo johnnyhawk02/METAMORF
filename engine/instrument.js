@@ -5,10 +5,10 @@
 // Each engine plays one note at a time: a new note fades the old one out over 3 ms while it starts. A note coming back
 // (RETURN: the zone going back to an earlier held key) starts on the next step of the BPM grid. The reverb send is
 // collected from every voice and returned at unity before the master.
-import { Voice } from './voice.js?v=mwm930re';
-import { Reverb, REVERB_DEFAULTS } from './reverb.js?v=mwm930re';
-import { Comp, COMP_DEFAULTS } from './comp.js?v=mwm930re';
-import { Dirt, DIRT_DEFAULTS } from '../sound/dirt.js?v=mwm930re';
+import { Voice } from './voice.js?v=mwma0hzc';
+import { Reverb, REVERB_DEFAULTS } from './reverb.js?v=mwma0hzc';
+import { Comp, COMP_DEFAULTS } from './comp.js?v=mwma0hzc';
+import { Dirt, DIRT_DEFAULTS } from '../sound/dirt.js?v=mwma0hzc';
 
 export const MASTER_DEFAULTS = { level: 80 };
 export const TEMPO_DEFAULTS = { bpm: 120, ret: 2 };

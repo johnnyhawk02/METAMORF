@@ -178,6 +178,10 @@ for (const [w, h] of [[1440, 900], [1280, 800], [1440, 760], [1280, 700]]) {
     if (!(c[0] > 0) || !/COMPRESSOR THRESHOLD -\d+dB/.test(c[1])) bad('the compressor THRESHOLD knob', c);
     const lay2 = await M(() => [document.documentElement.scrollWidth - innerWidth, document.documentElement.scrollHeight - innerHeight]); if (lay2[0] > 0 || lay2[1] > 0) bad('the FX tab scrolls', lay2); }
   if (w === 1440 && h === 900 || w === 1280 && h === 700) await p.screenshot({ path: `${out}/fx-${w}x${h}.png` });
+  // playing a key, a key on another engine, or picking one on the strip leaves the FX + MASTER tab where it is
+  { await M(() => { metamorf.noteOn(1, 50, 100); metamorf.noteOn(1, 70, 100); }); await p.waitForTimeout(60); await p.click('.keystrip .k >> nth=3');
+    const v = await M(() => [document.getElementById('fxside').hidden, document.querySelector('.editor').hidden]);
+    if (v[0] || !v[1]) bad('playing or picking a key left the FX tab', v); }
   await p.keyboard.press('f');
   // ---- a CC from the Bass Station 2 map turns the key's knob (DECAY, and the filter's CUTOFF) ----
   { await M(() => { metamorf.noteOn(1, 55, 100); metamorf.cc(91, 127); }); const s = await M(() => [metamorf.keys()[7].p.decay, document.getElementById('last-text').textContent]);

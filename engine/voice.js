@@ -17,9 +17,9 @@
 // retriggers the envelopes (and the click) SPACING apart: its whole part the number of repeats, its fraction the level
 // of the last. Both phases start at zero on every note and
 // the noise is seeded from the sound, so a sound renders the same every time.
-import { PARAMS, MAPS, levelGain, modDepth, MOD_SOURCES } from '../sound/params.js?v=mwm930re';
+import { PARAMS, MAPS, levelGain, modDepth, MOD_SOURCES } from '../sound/params.js?v=mwma0hzc';
 import { MorphFilter, Filter2 } from './filters.js?v=STAMP';
-import { table, read, DEFAULT_TABLE } from './tables.js?v=mwm930re';
+import { table, read, DEFAULT_TABLE } from './tables.js?v=mwma0hzc';
 
 // an oscillator's table: the sound names it by id ($a, $b beside the parameters); one this thread doesn't hold plays
 // BASIC (missing: true). A table changed during a note crossfades over 10 ms from the old one, so it never clicks
