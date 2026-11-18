@@ -10,6 +10,7 @@ import { basic, builtin, read, fft, LEVELS, BUILTINS as MAKERS, fromFrames, DEFA
 const STAMP = (/from '\.\/tables\.js(\?v=\w+)?'/.exec(readFileSync(new URL('../engine/voice.js', import.meta.url), 'utf8')) || [])[1] || '';
 const { need, hold, table } = await import('../engine/tables.js' + STAMP);
 import { renderSound } from '../engine/offline.js';
+import { Voice } from '../engine/voice.js';
 let fails = 0, checks = 0;
 const ok = (c, m) => { checks++; if (!c) { fails++; console.log('FAIL', m); } };
 const fs = 48000, B = 128;
@@ -369,5 +370,44 @@ const f2loud = (res, damp, vowel, blend, pitch = 300) => { const F = new FL.Filt
 { const c = (d) => voice({ a_level: 0, c_level: 1, c_shape: 1, c_tone: 0.95, c_len: 0.6, c_direct: d, cutoff: Math.log(5) / Math.log(1000), hold: 0.5, decay: 0.8 }, 0.05);
   const hi = (x) => { let e = 0; for (let i = 1; i < x.length; i++) e += (x[i] - x[i - 1]) ** 2; return e; };
   ok(hi(c(1)) > 100 * hi(c(0)), `CLICK DIRECT doesn't skip the filters: ${hi(c(1)).toExponential(1)} vs ${hi(c(0)).toExponential(1)}`); }
+
+// ---- MODULATION and REPEAT (build step 6) ----
+{ // no route, an empty route list and a route at 0 all render the same, sample for sample; VELOCITY at 100 moves nothing
+  const p = { ...BASE, a_pos: 0.5, cutoff: 0.5, reso: 0.3, fm_ab: 0.2, b_level: 0.5 }, a = hit(p).L;
+  for (const m of [{}, { 'env>cutoff': 0 }, { 'vel>cutoff': 1, 'vel>fm_ab': -1 }]) { const b = hit({ ...p, $m: m }).L; ok(a.every((v, i) => v === b[i]), 'a route that moves nothing changes the sound: ' + JSON.stringify(m)); }
+  const quiet = hit({ ...p, $m: { 'vel>cutoff': 1 } }, OUT_DEFAULT, fs, 127).L, loud = hit(p, OUT_DEFAULT, fs, 127).L;
+  ok(tilt(quiet.subarray(0, 8192)) > 2 * tilt(loud.subarray(0, 8192)), 'VELOCITY > CUTOFF at 127 does not brighten'); }
+{ // MOD ENV > CUTOFF: bright at the start, back to the knob's own once the envelope is done
+  const p = { a_pos: 0.5, cutoff: 0.4, decay: 0.8, hold: 0.6, me_decay: Math.log(30) / Math.log(4000) }, on = voice({ ...p, $m: { 'env>cutoff': 1 } }), off = voice(p);
+  ok(tilt(on.subarray(0, 1024)) > 4 * tilt(off.subarray(0, 1024)), `MOD ENV > CUTOFF not bright at the start: ${tilt(on.subarray(0, 1024))} vs ${tilt(off.subarray(0, 1024))}`);
+  const late = (x) => x.subarray(fs / 5, fs / 5 + 8192); ok(Math.abs(rms(late(on)) / rms(late(off)) - 1) < 0.01, 'MOD ENV still there after its decay'); }
+{ // LFO > LEVEL at 4 Hz: the level rises and falls 4 times a second
+  const x = voice({ hold: 1, decay: 1, curve: -1, lfo_rate: Math.log(80) / Math.log(40000), $m: { 'lfo>a_level': -0.5 } }, 1);
+  const w = 1200, env = []; for (let i = fs / 10; i + w <= fs; i += w) env.push(rms(x, i, i + w));
+  let turns = 0; for (let i = 2; i < env.length; i++) if ((env[i] - env[i - 1]) * (env[i - 1] - env[i - 2]) < 0) turns++;
+  ok(turns >= 6 && turns <= 8 && Math.min(...env) < 0.7 * Math.max(...env), `LFO > LEVEL: ${turns} turns in 0.9 s, ${Math.min(...env).toFixed(3)}..${Math.max(...env).toFixed(3)}`); }
+{ // the LFO's shapes at their points, and in range between
+  const v = new Voice(fs), at = (sh, p) => { v.lph = p; return v.lfo(sh); }; v.lrA = -0.5; v.lrB = 0.5;
+  ok(Math.abs(at(0, 0.25) - 1) < 1e-9 && Math.abs(at(0.25, 0.25) - 1) < 1e-9 && Math.abs(at(0.25, 0.5)) < 1e-9 && Math.abs(at(0.5, 0) - 1) < 1e-9 && at(0.75, 0.2) === 1 && at(0.75, 0.7) === -1, 'LFO shapes');
+  ok(Math.abs(at(1, 0) + 0.5) < 1e-9 && Math.abs(at(1, 0.5)) < 1e-9 && Math.abs(at(1, 0.999) - 0.5) < 1e-4, 'LFO smooth random');
+  let bad = 0; for (let sh = 0; sh <= 1; sh += 0.05) for (let p = 0; p < 1; p += 0.01) { const y = at(sh, p); if (!(Math.abs(y) <= 1)) bad++; } ok(!bad, 'LFO out of range'); }
+{ // a route added, moved and taken away during a note: no step bigger than the note's own (it glides)
+  const steady = { ...BASE, a_tune: -0.3, p_amt: 0, decay: 1, curve: -1, hold: 1, cutoff: 0.6 }, ref = hit(steady, OUT_DEFAULT, fs / 2).L, refStep = maxStep(ref, fs / 10, fs / 2);
+  for (const key of ['env>cutoff', 'lfo>cutoff', 'lfo>a_level', 'vel>fm_ab', 'vel>decay']) { // (not pitch or the table's position: they change the tone's own steps)
+    const I = new Instrument(fs); I.play(0, steady, OUT_DEFAULT, 120);
+    const { L } = render(I, fs / 2, (i) => { if (i === 128 * 40) I.update(0, { $m: { [key]: 1 } }); if (i === 128 * 100) I.update(0, { $m: { [key]: -0.5 } }); if (i === 128 * 150) I.update(0, { $m: {} }); });
+    ok(maxStep(L, 128 * 39, fs / 2) < refStep * 3 + 0.01, `${key} clicks when it changes: ${maxStep(L, 128 * 39, fs / 2).toFixed(4)} vs ${refStep.toFixed(4)}`); } }
+{ // REPEAT 3 at 60 ms: four hits, 60 ms apart, all at the same level; REPEAT 2.5: the third at half; then the voice ends
+  const p = { p_amt: 0, decay: 0.25, a_tune: 0.4, spacing: Math.log(60) / Math.log(80) }; // (a high tone: its peak doesn't hang on where its cycle is)
+  const pk = (x) => [0, 1, 2, 3, 4].map((h) => peak(x, h * 2880 + 10, h * 2880 + 2800));
+  const r3 = pk(voice({ ...p, repeat: 3 / 8 })), r25 = pk(voice({ ...p, repeat: 2.5 / 8 }));
+  ok(r3.slice(0, 4).every((v) => Math.abs(v / r3[1] - 1) < 0.12) && r3[4] < 0.05 * r3[1], // (within 12%: where the cycle is at each start moves its peak a little)
+     'REPEAT 3: ' + r3.map((v) => v.toFixed(3)));
+  ok(Math.abs(r25[1] / r3[1] - 1) < 0.01 && Math.abs(r25[3] / r3[3] - 0.5) < 0.02 && r25[4] < 0.05 * r3[1], 'REPEAT 2.5: ' + r25.map((v) => v.toFixed(3)));
+  const I = new Instrument(fs); I.play(0, { ...BASE, ...p, repeat: 3 / 8 }, OUT_DEFAULT, 100); render(I, fs / 2); ok(!I.eng[0].voice.on, 'a repeating voice never ends'); }
+{ // a voice with routes costs a little more, and none costs nothing
+  const p = { ...BASE, b_level: 0.6, fm_ab: 0.3, cutoff: 0.6 }, m = { 'env>cutoff': 0.5, 'lfo>a_pos': 0.3, 'vel>fm_ab': 0.4, 'env>fm_ba': 0.2 };
+  const time = (q) => { const t0 = performance.now(); for (let r = 0; r < 4; r++) hit(q, OUT_DEFAULT, fs); return (performance.now() - t0) / 4; };
+  time(p); const a = time(p), b = time({ ...p, $m: m }); console.log(`  one voice, one second: ${a.toFixed(1)} ms; with four routes ${b.toFixed(1)} ms`); ok(b < a * 2 + 5, 'routes too slow'); }
 console.log(fails ? `${fails} of ${checks} checks failed` : `ok: ${checks} checks`);
 process.exit(fails ? 1 : 0);

@@ -3,8 +3,8 @@
 // Build step 1 has the ones that need no kept sounds: FREE (every parameter anywhere in its safe range), the starter
 // recipes (a sound of a named type, hand-tuned ranges for the stub voice) and ALTER (a nudge around a sound's home).
 // LIBRARY, BREED, MORPH, STYLE and the learned recipes come with the library (build steps 10 and 11).
-import { PARAMS, BY_ID, isBip } from './params.js?v=mwm889or';
-import { BUILTIN_IDS } from '../engine/tables.js?v=mwm889or';
+import { PARAMS, BY_ID, isBip, MOD_ROUTES, MOD_SOURCES, routeKey, validRoute } from './params.js?v=mwm8nfdt';
+import { BUILTIN_IDS } from '../engine/tables.js?v=mwm8nfdt';
 
 const pick = (rnd, [lo, hi]) => lo + rnd() * (hi - lo);
 const lim = (p) => [isBip(p) ? -1 : 0, 1];
@@ -27,7 +27,7 @@ export const STARTERS = {
   perc: { a_pos: [0, 0.45], a_tune: [-0.1, 0.25], p_amt: [0.02, 0.1], p_decay: [0.15, 0.35], decay: [0.3, 0.45], attack: [0, 0.05], hold: [0, 0.1], b_level: [0, 0.5], b_pos: [0, 0.5], b_ratio: [0.4, 0.65], b_track: [0.5, 1], fm_ab: [0, 0.3], c_level: [0, 0.3], c_shape: [0.2, 0.8], f2_mix: [0, 0.5], f2_blend: [0, 0.6], f2_track: [0.5, 1] },
   zap: { a_pos: [0.25, 0.8], a_tune: [-0.3, 0.1], p_amt: [0.5, 0.9], p_decay: [0.35, 0.55], p_curve: [-0.3, 0.4], decay: [0.35, 0.5], attack: [0, 0.05], hold: [0, 0.1], b_level: [0, 0.6], b_pos: [0.4, 1], b_ratio: [0.33, 0.55], b_det: [-0.3, 0.3], b_track: [0.8, 1], fm_ab: [0, 0.5], fm_ba: [0, 0.3], drive: [0, 0.5], reso: [0.3, 0.7], f_track: [0.5, 1], cutoff: [0.5, 0.85], f_morph: [0, 0.5] },
   snare: { a_pos: [0.1, 0.3], a_tune: [-0.2, 0], p_amt: [0.08, 0.2], p_decay: [0.15, 0.3], decay: [0.35, 0.5], attack: [0, 0.03], hold: [0, 0.1], b_level: [0.4, 0.8], b_pos: [0.6, 1], b_ratio: [0.45, 0.62], b_track: [0, 0.4], n_level: [0.45, 0.85], n_colour: [-0.1, 0.6], n_decay: [0.55, 0.85], c_level: [0.1, 0.45], c_shape: [0.5, 1], c_tone: [0.65, 0.9], drive: [0, 0.3], f_morph: [0.2, 0.75], cutoff: [0.6, 0.9], reso: [0, 0.35] },
-  clap: { a_pos: [0.5, 0.9], a_tune: [0, 0.2], p_amt: [0, 0.05], decay: [0.25, 0.38], attack: [0, 0.1], hold: [0, 0.1], b_level: [0.5, 0.9], b_pos: [0.7, 1], b_ratio: [0.5, 0.75], b_det: [-0.6, 0.6], b_track: [0, 0.3], n_level: [0.6, 0.95], n_colour: [-0.2, 0.4], n_decay: [0.6, 0.85], c_level: [0, 0.3], c_shape: [0.8, 1], f_morph: [0.35, 0.65], cutoff: [0.62, 0.82], reso: [0.1, 0.45] },
+  clap: { repeat: [0.25, 0.45], spacing: [0.45, 0.62], a_pos: [0.5, 0.9], a_tune: [0, 0.2], p_amt: [0, 0.05], decay: [0.25, 0.38], attack: [0, 0.1], hold: [0, 0.1], b_level: [0.5, 0.9], b_pos: [0.7, 1], b_ratio: [0.5, 0.75], b_det: [-0.6, 0.6], b_track: [0, 0.3], n_level: [0.6, 0.95], n_colour: [-0.2, 0.4], n_decay: [0.6, 0.85], c_level: [0, 0.3], c_shape: [0.8, 1], f_morph: [0.35, 0.65], cutoff: [0.62, 0.82], reso: [0.1, 0.45] },
   rim: { a_pos: [0.2, 0.6], a_tune: [0.15, 0.35], p_amt: [0.02, 0.08], p_decay: [0.05, 0.2], decay: [0.15, 0.28], attack: [0, 0.02], hold: [0, 0.05], b_level: [0.3, 0.7], b_pos: [0.5, 0.9], b_ratio: [0.55, 0.72], b_track: [0, 0.5], c_level: [0.35, 0.75], c_shape: [0.3, 0.7], c_tone: [0.75, 0.95], c_len: [0.1, 0.4], fm_ab: [0, 0.3], f2_mix: [0, 0.4], f2_blend: [0, 0.3], f2_track: [0.5, 1] },
   bell: { a_pos: [0, 0.2], a_tune: [0.2, 0.5], p_amt: [-0.02, 0.02], decay: [0.55, 0.7], curve: [-0.3, 0.3], attack: [0, 0.03], hold: [0, 0.1], b_level: [0.4, 0.8], b_pos: [0, 0.25], b_ratio: [0.55, 0.8], b_det: [-0.2, 0.2], b_track: [0, 0.2], fm_ab: [0.1, 0.45], f2_mix: [0, 0.4], f2_blend: [0, 0.4], f2_track: [0.7, 1] },
   'closed hat': { a_pos: [0.8, 1], a_tune: [0.6, 0.8], p_amt: [0, 0.03], decay: [0.12, 0.25], curve: [0.5, 1], attack: [0, 0.02], hold: [0, 0.05], b_level: [0.6, 0.9], b_pos: [0.75, 1], b_ratio: [0.62, 0.9], b_det: [-0.8, 0.8], b_track: [0, 0.1], n_level: [0.5, 0.9], n_colour: [0.5, 1], n_decay: [0.5, 0.8], fm_ab: [0.2, 0.6], fm_ba: [0, 0.35], f_morph: [0.75, 1], cutoff: [0.75, 0.95], reso: [0, 0.4] },
@@ -82,6 +82,42 @@ export function alter(rnd, home, depth, wild, keep = () => false) {
     if (keep(p.id)) continue;
     const h = home[p.id], [a, b] = wild ? lim(p) : p.safe, lo = Math.min(a, h), hi = Math.max(b, h);
     o[p.id] = round(Math.min(hi, Math.max(lo, h + (rnd() * 2 - 1) * depth * (hi - lo))));
+  }
+  return o;
+}
+
+// ---- modulation routes ($m beside the parameters: { 'env>cutoff': amount -1..1 }) ----
+// FREE: none, one or two of the routes that make sense, at any amount. A recipe: each of its type's routes by its
+// chance, at an amount in its range. ALTER moves the amounts a sound has, never adds or removes a route.
+const ROUTE_PICKS = { // [route, chance, [lo, hi] amount]
+  kick: [['env>cutoff', 0.4, [0.3, 0.8]], ['vel>decay', 0.3, [0.1, 0.4]], ['vel>p_amt', 0.3, [0.1, 0.4]]],
+  tom: [['vel>p_amt', 0.4, [0.2, 0.5]], ['vel>cutoff', 0.3, [0.3, 0.7]]],
+  perc: [['env>a_pos', 0.4, [0.2, 0.7]], ['env>fm_ab', 0.3, [0.2, 0.6]], ['vel>fm_ab', 0.2, [0.2, 0.5]]],
+  zap: [['env>fm_ab', 0.4, [0.3, 0.8]], ['env>a_pos', 0.4, [-0.7, 0.7]], ['lfo>a_tune', 0.2, [0.02, 0.08]]],
+  snare: [['vel>cutoff', 0.4, [0.2, 0.6]], ['env>cutoff', 0.3, [0.2, 0.6]]],
+  clap: [['env>cutoff', 0.4, [0.2, 0.6]], ['vel>cutoff', 0.3, [0.2, 0.5]]],
+  rim: [['vel>c_level', 0.4, [0.2, 0.5]], ['env>f2_pitch', 0.2, [-0.4, 0.4]]],
+  bell: [['lfo>a_pos', 0.3, [0.1, 0.3]], ['vel>fm_ab', 0.4, [0.2, 0.5]], ['env>fm_ab', 0.3, [0.2, 0.5]]],
+  'closed hat': [['vel>decay', 0.4, [0.1, 0.3]], ['env>fm_ab', 0.3, [0.2, 0.5]]],
+  'open hat': [['vel>decay', 0.4, [0.1, 0.3]], ['env>cutoff', 0.3, [0.1, 0.4]]],
+  cymbal: [['lfo>b_pos', 0.3, [0.1, 0.4]], ['vel>decay', 0.3, [0.1, 0.3]]],
+};
+const ALL_ROUTES = MOD_SOURCES.flatMap((s) => MOD_ROUTES[s].map((id) => routeKey(s, id)));
+/** the routes for a new sound of a type ('' for FREE) */
+export function pickRoutes(rnd, type) {
+  const m = {}, r = ROUTE_PICKS[type];
+  if (r) { for (const [key, chance, rg] of r) if (rnd() < chance) m[key] = round(pick(rnd, rg)); return m; }
+  const n = Math.floor(rnd() * 3);
+  for (let i = 0; i < n; i++) { const key = ALL_ROUTES[Math.floor(rnd() * ALL_ROUTES.length)]; m[key] = round((rnd() < 0.5 ? -1 : 1) * (0.15 + rnd() * 0.65)); }
+  return m;
+}
+/** ALTER on the routes: each amount moved around its home by depth (never past ±1, never to the other side unless wild) */
+export function alterRoutes(rnd, home, depth, wild) {
+  const o = {};
+  for (const key in home || {}) {
+    if (!validRoute(key)) continue;
+    const h = home[key], lo = wild ? -1 : h < 0 ? -1 : 0, hi = wild ? 1 : h < 0 ? 0 : 1;
+    o[key] = round(Math.min(hi, Math.max(lo, h + (rnd() * 2 - 1) * depth * (hi - lo))));
   }
   return o;
 }
