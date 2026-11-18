@@ -1,7 +1,7 @@
 // SCREEN COLOURS (SETTINGS): the screen is drawn in two colours, a panel and an ink (css/lcd.css derives every other
 // shade from them). A few looks to pick, or your own two; kept in this browser, not in presets. A dark panel loses the
 // LCD's backlight glow and shades towards black. index.html applies the kept colours before the first paint.
-import { $ } from './controls.js?v=mwm5nxnv';
+import { $ } from './controls.js?v=mwm61gqf';
 
 export const COLOURS_STORE = 'metamorf-colours';
 export const THEMES = [['LCD', '#a7b58c', '#17200e'], ['BLUE LCD', '#9cb6c6', '#0c1a28'], ['PAPER', '#e2ded0', '#1e1c18'],

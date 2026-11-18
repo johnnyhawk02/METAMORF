@@ -2,15 +2,15 @@
 // knobs edit the key played last. The sound engine is in engine/ and sound/ (no UI there); the controls, colours and
 // phone view are in this folder.
 import { PARAMS, BY_ID, SECTIONS, BASE, OUT_DEFAULT, TYPES, KEYS, MAX_ENGINES, DEFAULT_ENGINES, DEFAULT_LOW, isBip, showValue, fullParams, clampN,
-  levelText, panText, sendText, panRange, engineOf, zoneOf } from '../sound/params.js?v=mwm5nxnv';
-import { free, recipe, alter, RECIPE_TYPES } from '../sound/makers.js?v=mwm5nxnv';
-import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm5nxnv';
-import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm5nxnv';
-import { presetName } from './names.js?v=mwm5nxnv';
-import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm5nxnv';
-import { setupColours } from './colours.js?v=mwm5nxnv';
-import { setupPhone } from './phone.js?v=mwm5nxnv';
-import { render as renderOffline } from './offline.js?v=mwm5nxnv';
+  levelText, panText, sendText, panRange, engineOf, zoneOf } from '../sound/params.js?v=mwm61gqf';
+import { free, recipe, alter, RECIPE_TYPES } from '../sound/makers.js?v=mwm61gqf';
+import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm61gqf';
+import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm61gqf';
+import { presetName } from './names.js?v=mwm61gqf';
+import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm61gqf';
+import { setupColours } from './colours.js?v=mwm61gqf';
+import { setupPhone } from './phone.js?v=mwm61gqf';
+import { render as renderOffline } from './offline.js?v=mwm61gqf';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2); // C3 = 60
@@ -92,14 +92,16 @@ const engineGain = (e) => S.engLevel[e] / 100;
 // ---------------------------------------------------------------------------------------------------------------
 // audio
 // ---------------------------------------------------------------------------------------------------------------
-let ctx = null, node = null;
+let ctx = null, node = null, heard = 0, audioError = '';
 const send = (m) => { if (node) node.port.postMessage(m); };
 async function startAudio() {
   if (ctx) { if (ctx.state !== 'running') await ctx.resume(); return; }
   ctx = new AudioContext({ latencyHint: 'interactive' });
-  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm5nxnv', import.meta.url));
+  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm61gqf', import.meta.url));
   node = new AudioWorkletNode(ctx, 'metamorf', { numberOfInputs: 0, outputChannelCount: [2] });
-  node.port.onmessage = (e) => { if (e.data.type === 'peaks') { showPeaks(e.data.peaks); showSc(e.data.sc || 0); } };
+  node.port.onmessage = (e) => { if (e.data.type === 'peaks') { heard = Math.max(heard, ...e.data.peaks); showPeaks(e.data.peaks); showSc(e.data.sc || 0); } };
+  // (the sound engine failed on the audio thread: say so, rather than play silence)
+  node.onprocessorerror = () => { audioError = 'the sound engine stopped'; detail('<em>no sound</em>: the sound engine stopped with an error. Reload the page; if it keeps happening, tell Claude'); };
   node.connect(ctx.destination);
   sendFx(); send({ type: 'engines', n: S.engines }); sendEngineGains();
   if (ctx.state !== 'running') await ctx.resume();
@@ -890,5 +892,6 @@ document.fonts?.ready.then(alignEngines);
 window.metamorf = { noteOn: (ch, note, vel = 100) => noteOn(ch, note, vel), noteOff: (note) => noteOff(note), cc: (cc, val) => onCC(cc, val),
   keys: () => S.keys, cur: () => S.cur, engines: () => S.engines, low: () => S.low, fx: () => S.fx, locks: () => S.locks, rand: () => S.rand,
   presets: { list: () => presets, now: () => S.preset, dirty: presetDirty, import: importPresets }, undoDepth: () => undoStack.length,
+  audio: () => ({ state: ctx ? ctx.state : 'none', heard, error: audioError }),
   render: (place = S.cur, seconds = 1) => renderOffline(S.keys[place].p, S.keys[place].out, 100, seconds) }; // (an offline render of a key, in the Worker)
 window.metamorfReady = true; // index.html's load check
