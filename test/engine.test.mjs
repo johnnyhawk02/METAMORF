@@ -309,5 +309,65 @@ const centroid = (x) => { const sp = spectrum(x); let a = 0, b = 0; for (let k =
   const I = new Instrument(fs); for (let e = 0; e < 4; e++) I.play(e, p, OUT_DEFAULT, 100);
   const t = performance.now(); render(I, fs); const ms = performance.now() - t;
   console.log(`  four engines, every part on, one second: ${ms.toFixed(1)} ms`); ok(ms < 250, `four engines with every part on take ${ms.toFixed(0)} ms a second`); }
+// ---- FILTER 1 and FILTER 2 (build step 5) ----
+const FSTAMP = (/from '\.\/filters\.js(\?v=\w+)?'/.exec(readFileSync(new URL('../engine/voice.js', import.meta.url), 'utf8')) || [])[1] || '';
+const FL = await import('../engine/filters.js' + FSTAMP);
+// pink noise (by its spectrum: every bin 1/sqrt(f), random phases), and K-weighted loudness (the BS.1770 biquads at 48 kHz)
+const pink = (n, seed = 5) => { const r = seeded(seed), re = new Float64Array(n), im = new Float64Array(n);
+  for (let k = 1; k < n / 2; k++) { const a = 1 / Math.sqrt(k), ph = 2 * Math.PI * r(); re[k] = a * Math.cos(ph); im[k] = a * Math.sin(ph); re[n - k] = re[k]; im[n - k] = -im[k]; }
+  fft(re, im, 1); let e = 0; for (let i = 0; i < n; i++) e += re[i] * re[i]; const g = 0.25 / Math.sqrt(e / n); return Float64Array.from(re, (v) => v * g); };
+const KQ = [[1.53512485958697, -2.69169618940638, 1.19839281085285, -1.69065929318241, 0.73248077421585], [1, -2, 1, -1.99004745483398, 0.99007225036621]];
+const loud = (x, from = 4096) => { let y = Float64Array.from(x);
+  for (const [b0, b1, b2, a1, a2] of KQ) { let x1 = 0, x2 = 0, y1 = 0, y2 = 0; for (let i = 0; i < y.length; i++) { const v = y[i], o = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = v; y2 = y1; y1 = o; y[i] = o; } }
+  let e = 0; for (let i = from; i < y.length; i++) e += y[i] * y[i]; return 10 * Math.log10(e / (y.length - from)); };
+const PN = pink(1 << 16);
+// FILTER 1: matched level. Pink noise at every cutoff from 100 Hz to 8 kHz and resonance up to 0.7: every MORPH
+// position within 1.5 dB of the LP end (K-weighted)
+{ let worst = 0, where = '';
+  for (const fc of [100, 200, 500, 1000, 2000, 4000, 8000]) for (const res of [0, 0.35, 0.7]) {
+    const at = (m) => { const F = new FL.MorphFilter(fs); return loud(Float64Array.from(PN, (v) => F.process(v, fc, res, m))); };
+    const ref = at(0);
+    for (let m = 0.125; m <= 1; m += 0.125) { const d = Math.abs(at(m) - ref); if (d > worst) { worst = d; where = `${fc} Hz, resonance ${res}, morph ${m}`; } }
+  }
+  console.log(`  FILTER 1 across the morph: worst ${worst.toFixed(2)} dB from the LP end (${where})`);
+  ok(worst < 1.5, `FILTER 1 level across the morph: ${worst.toFixed(2)} dB at ${where}`); }
+// the BP point is normalised: its peak at unity, whatever the resonance
+ok([0, 0.5, 1].every((res) => Math.abs(FL.morphPower(1000, 1000, FL.damping(res), [0, 1, 0], fs) - 1) < 1e-9), 'the band-pass is not normalised');
+// no clicks: MORPH, CUTOFF and RESONANCE swept end to end in 5 ms during a note
+{ const steady = { ...BASE, a_tune: -0.3, p_amt: 0, decay: 1, curve: -1, hold: 1, a_pos: 0.5 }, own = (p) => maxStep(voice({ ...steady, ...p }, 0.3), fs / 10);
+  for (const [id, lo, hi, extra] of [['f_morph', 0, 1, { cutoff: 0.6, reso: 0.5 }], ['cutoff', 0, 1, { reso: 0.5 }], ['reso', 0, 1, { cutoff: 0.6 }], ['f2_blend', 0, 1, { f2_mix: 1 }], ['f2_vowel', 0, 1, { f2_mix: 1, f2_blend: 1 }], ['f2_res', -1, 1, { f2_mix: 1 }]]) {
+    const I = new Instrument(fs), at = fs / 10, len = fs / 200; I.play(0, { ...steady, ...extra, [id]: lo }, OUT_DEFAULT, 100);
+    const pre = (inst, n, f) => { const L = new Float32Array(n); for (let i = 0; i < n; i += B) { f(i); inst.render(new Float32Array(B), new Float32Array(B)); L.set(inst.EL[0].subarray(0, Math.min(B, n - i)), i); } return L; };
+    const L = pre(I, fs / 4, (i) => { if (i >= at && i <= at + len) I.update(0, { [id]: lo + (hi - lo) * (i - at) / len }); });
+    const ref = Math.max(...[0, 0.25, 0.5, 0.75, 1].map((x) => own({ ...extra, [id]: lo + (hi - lo) * x })));
+    // (the engine's own output, before the master; a 5 ms sweep of a resonant filter rings, but never steps)
+    ok(L.every(Number.isFinite) && maxStep(L, at - 200, fs / 4) <= ref * 1.6 + 0.02, `${id} swept in 5 ms: step ${maxStep(L, at - 200, fs / 4).toFixed(3)} vs ${ref.toFixed(3)}`);
+  } }
+// stable: resonance at its top, cutoff at 20 kHz at 96 kHz, after full drive, and cutoff swept fast at full resonance
+{ for (const rate of [44100, 48000, 96000]) {
+    const x = renderSound({ ...BASE, a_pos: 0.75, drive: 1, reso: 1, cutoff: 1, f_track: 1, p_amt: 0.6, n_level: 1, hold: 0.5, decay: 0.8 }, OUT_DEFAULT, 127, 1, rate).L;
+    ok(x.every(Number.isFinite) && peak(x) < 8, `FILTER 1 at full resonance, 20 kHz, ${rate}: peak ${peak(x)}`); }
+  const F = new FL.MorphFilter(fs); let pk = 0, fin = true;
+  for (let i = 0; i < fs; i++) { const y = F.process(PN[i & 65535], 20 * Math.pow(1000, 0.5 + 0.5 * Math.sin(i / 300)), 1, (i / fs) % 1); fin = fin && Number.isFinite(y); pk = Math.max(pk, Math.abs(y)); }
+  ok(fin && pk < 50, `FILTER 1 swept fast at full resonance: peak ${pk.toFixed(1)}`); }
+// FILTER 2, the comb: tuned to PITCH (with DAMP's delay taken out); negative RESONANCE: odd harmonics of half the pitch
+{ const peakHz = (fb, damp, pitch) => { const F = new FL.Filter2(fs), n = 1 << 15, y = new Float64Array(n); for (let i = 0; i < n; i++) y[i] = F.process(PN[i], pitch, fb, damp, 0, 0);
+    const sp = spectrum(y.subarray(n - 16384)); let best = 0, k0 = 0; for (let k = Math.round(150 * 16384 / fs); k < 2000 * 16384 / fs; k++) if (sp[k] > best) { best = sp[k]; k0 = k; } return k0 * fs / 16384; };
+  for (const damp of [0, 0.5, 1]) { const f = peakHz(0.95, damp, 220); ok(Math.abs(f / 220 - Math.round(f / 220)) < 0.03 && f > 200, `the comb at 220 Hz, damp ${damp}: strongest above 150 Hz at ${f.toFixed(1)} Hz`); }
+  const fn = peakHz(-0.95, 0, 220); ok(Math.abs(fn - 110 * Math.round(fn / 110)) < fn * 0.01 && Math.round(fn / 110) % 2 === 1, `the comb with negative resonance: strongest at ${fn.toFixed(1)} Hz, not an odd harmonic of 110`); }
+// FILTER 2's levels: the comb across RESONANCE (no jump crossing 0), VOWEL across the vowels, and COMB > VOWEL
+const f2loud = (res, damp, vowel, blend, pitch = 300) => { const F = new FL.Filter2(fs); return loud(Float64Array.from(PN, (v) => F.process(v, pitch, res, damp, vowel, blend))); };
+{ const L0 = loud(PN), comb = [-0.95, -0.6, -0.2, -0.01, 0.01, 0.2, 0.6, 0.95].map((r) => f2loud(r, 0.3, 0, 0) - L0);
+  ok(Math.max(...comb.map(Math.abs)) < 3, 'the comb across RESONANCE: ' + comb.map((d) => d.toFixed(1)).join(' ') + ' dB');
+  ok(Math.abs(comb[3] - comb[4]) < 0.2, 'the comb jumps crossing 0');
+  const vow = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1].map((v) => f2loud(0.5, 0.3, v, 1, 500));
+  ok(Math.max(...vow) - Math.min(...vow) < 4, 'VOWEL across the vowels: ' + vow.map((d) => (d - L0).toFixed(1)).join(' ') + ' dB');
+  const bl = [0, 0.25, 0.5, 0.75, 1].map((b) => f2loud(0.6, 0.3, 0.3, b, 500));
+  ok(Math.max(...bl) - Math.min(...bl) < 4, 'COMB > VOWEL: ' + bl.map((d) => (d - L0).toFixed(1)).join(' ') + ' dB');
+  console.log(`  FILTER 2 levels against its input: comb ${comb.map((d) => d.toFixed(1)).join(' ')}; vowels ${vow.map((d) => (d - L0).toFixed(1)).join(' ')}; blend ${bl.map((d) => (d - L0).toFixed(1)).join(' ')} dB`); }
+// CLICK DIRECT: the click skips the filters (a bright burst through a 100 Hz low-pass comes out bright only when direct)
+{ const c = (d) => voice({ a_level: 0, c_level: 1, c_shape: 1, c_tone: 0.95, c_len: 0.6, c_direct: d, cutoff: Math.log(5) / Math.log(1000), hold: 0.5, decay: 0.8 }, 0.05);
+  const hi = (x) => { let e = 0; for (let i = 1; i < x.length; i++) e += (x[i] - x[i - 1]) ** 2; return e; };
+  ok(hi(c(1)) > 100 * hi(c(0)), `CLICK DIRECT doesn't skip the filters: ${hi(c(1)).toExponential(1)} vs ${hi(c(0)).toExponential(1)}`); }
 console.log(fails ? `${fails} of ${checks} checks failed` : `ok: ${checks} checks`);
 process.exit(fails ? 1 : 0);

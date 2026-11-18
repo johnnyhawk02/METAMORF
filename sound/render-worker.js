@@ -4,8 +4,8 @@
 // - { id, type: 'table', table } -> { id, table }: a built-in table built (or already held) here, a copy sent back
 //   for the audio thread.
 // - { id, type: 'user', table, name, frames } -> { id, table }: a user table built from its frames, held here.
-import { renderSound } from '../engine/offline.js?v=mwm7rfj6';
-import { need, holds, hold, table, fromFrames, BUILTIN_IDS } from '../engine/tables.js?v=mwm7rfj6';
+import { renderSound } from '../engine/offline.js?v=mwm889or';
+import { need, holds, hold, table, fromFrames, BUILTIN_IDS } from '../engine/tables.js?v=mwm889or';
 
 self.onmessage = (e) => {
   const m = e.data, id = m.id;

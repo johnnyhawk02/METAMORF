@@ -635,3 +635,4 @@ html.phone .pv { position: relative; display: grid; grid-template-columns: repea
 .menupanel .wtlist svg { width: 64px; height: 28px; align-self: center; }
 .menupanel .wtlist svg path { fill: none; stroke: var(--ink); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .wtsizes[hidden] { display: none; }
+.faders .vf.off { opacity: .42; }

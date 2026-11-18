@@ -11,8 +11,9 @@
 // anti-aliasing. Every parameter glides (a one-pole of about 5 ms on its normalised value) so a knob turned while the
 // note rings never clicks; a new note snaps straight to its own settings. Both phases start at zero on every note and
 // the noise is seeded from the sound, so a sound renders the same every time.
-import { PARAMS, MAPS, levelGain } from '../sound/params.js?v=mwm7rfj6';
-import { table, read, DEFAULT_TABLE } from './tables.js?v=mwm7rfj6';
+import { PARAMS, MAPS, levelGain } from '../sound/params.js?v=mwm889or';
+import { MorphFilter, Filter2 } from './filters.js?v=STAMP';
+import { table, read, DEFAULT_TABLE } from './tables.js?v=mwm889or';
 
 // an oscillator's table: the sound names it by id ($a, $b beside the parameters); one this thread doesn't hold plays
 // BASIC (missing: true). A table changed during a note crossfades over 10 ms from the old one, so it never clicks
@@ -68,7 +69,8 @@ export class Voice {
     this.minAttack = 0.0003; // ATTACK at 0 is still a ramp of 0.3 ms (a dozen or so samples): no click
     this.tabA = new Tab(); this.tabB = new Tab(); this.xfStep = 1 / (0.01 * fs);
     this.dcR = 1 - 2 * Math.PI * 5 / fs;
-    this.dX = new Float64Array(64); this.dV = new Float64Array(128);
+    this.dX = new Float64Array(64); this.dV = new Float64Array(128); this.dd = new Float64Array(DRIVE_DELAY);
+    this.f1 = new MorphFilter(fs); this.f2 = new Filter2(fs);
   }
   /** a new note, at once, with its own settings (normalised params by id, out: the key's level, pan, send, trim) */
   start(params, out, vel, gain = 1) {
@@ -83,6 +85,7 @@ export class Voice {
     this.rng = 1 + Math.floor(clamp01(params.n_seed) * 65535) * 7919; this.crng = 0x9e3779b9; // (the noise seeded by SEED; the click's burst fixed)
     this.ct = 0; this.cph = 0; this.cb1 = 0; this.cb2 = 0; // (the click: its time, its chirp's phase, its band-pass)
     this.dcX = 0; this.dcY = 0; // (the DC blocker)
+    this.f1.reset(); this.f2.reset(); this.f2on = false; this.dd.fill(0); this.ddN = 0; // (the filters, the click's direct path)
     this.dx = 0; this.dF = 0; this.dX.fill(0); this.dV.fill(0); this.dN = 0; this.dE = 0; // (the drive: its filters, its curve's last input and antiderivative)
     this.quiet = 0; this.fade = 1; this.fadeStep = 0; this.moving = false; this.on = true;
   }
@@ -148,7 +151,7 @@ export class Voice {
       // OSC A at the sound's pitch; OSC B at RATIO times it, DETUNEd, with TRACK of A's pitch envelope (0: B holds still)
       const base = r[IX.a_tune] + r[IX.a_fine] / 100, sweep = r[IX.p_amt] * pe, top = fs * 0.45;
       const hz = Math.min(BASE_HZ * Math.pow(2, (base + sweep) / 12), top);
-      let y = 0;
+      let y = 0, yd = 0; // (yd: the click's DIRECT share, which skips DRIVE and the filters)
       const la = r[IX.a_level], lb = r[IX.b_level], ab = r[IX.fm_ab] * FM_DEPTH, ba = r[IX.fm_ba] * FM_DEPTH;
       // FM: B > A moves A's phase by B's last sample; A > B moves B's by A's this sample (so cross-FM is a loop of one
       // sample, and bounded: each oscillator's output is)
@@ -174,10 +177,10 @@ export class Voice {
           const hp = (w - (k + g) * this.cb1 - this.cb2) / (1 + k * g + g * g), bp = g * hp + this.cb1, lp = g * bp + this.cb2;
           this.cb1 = g * hp + bp; this.cb2 = g * bp + lp; c += bp * 2.2 * (2 * sh - 1);
         }
-        const fade = 1 - this.ct; y += c * cl * fade * fade;
+        const fade = 1 - this.ct, cc = c * cl * fade * fade, dr = r[IX.c_direct]; y += cc * (1 - dr); yd = cc * dr;
         this.ct += 1 / (len * fs);
       }
-      y *= this.env;
+      y *= this.env; yd *= this.env;
       // NOISE: its own envelope (the amp's attack and hold, then its decay: DECAY times the amp's)
       const nl = r[IX.n_level];
       if (this.stage < 2) this.envN = this.env;
@@ -192,6 +195,15 @@ export class Voice {
       // (FM can put energy at 0 Hz, where its sidebands fold over, and DRIVE on a lopsided wave makes some: a DC blocker,
       // its corner at 5 Hz)
       { const x = y; y = x - this.dcX + this.dcR * this.dcY; this.dcX = x; this.dcY = y; }
+      // FILTER 1 (the morph filter; TRACK: the cutoff follows the sound's pitch, its envelope too), then FILTER 2 (MIX
+      // of the comb and vowel blend; PITCH follows the sound's by its TRACK), then the click's DIRECT share, delayed as
+      // DRIVE delays the rest
+      const up = hz / BASE_HZ;
+      y = this.f1.process(y, r[IX.cutoff] * Math.pow(up, r[IX.f_track]), r[IX.reso], r[IX.f_morph]);
+      const mx = r[IX.f2_mix];
+      if (mx > 0) { const w = this.f2.process(y, r[IX.f2_pitch] * Math.pow(up, r[IX.f2_track]), r[IX.f2_res], r[IX.f2_damp], r[IX.f2_vowel], r[IX.f2_blend]); y += (w - y) * mx; this.f2on = true; }
+      else if (this.f2on) { this.f2.reset(); this.f2on = false; }
+      { const n = (this.ddN = (this.ddN + 1) % DRIVE_DELAY); y += this.dd[n]; this.dd[n] = yd; }
       // the key's output: velocity, LEVEL, TRIM, the engine's level and the fade, then an equal-power PAN
       if (this.fadeStep) { this.fade -= this.fadeStep; if (this.fade <= 0) { this.fade = 0; this.on = false; } }
       const amp = y * this.vel * levelGain(o.level) * Math.pow(10, o.trim / 20) * this.gain * this.fade;
