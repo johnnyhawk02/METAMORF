@@ -54,7 +54,7 @@ These are the features of LXR-AFX at `6b3aa30`, minus the engine, with the chang
 - **Top bar**: logo (METAMORF), PRESET menu (the patch's name, a `*` when unsaved), MIDI status box, LAST box (the last key played and how hard), SETTINGS menu, RANDOM menu, UNDO.
 - **Key panel** (top left): KEY note name and number, its engine and what it plays ("NAME · type · 2 edits"), the **key strip** of all 25 keys (grouped by engine, a padlock on locked keys, a dot on hand-edited keys; click a key to pick and hear it), and a row of buttons: **NEW SOUND** (a flat 2D dice that turns once and changes face a few times in about a third of a second, K), **ALTER KEY** (an icon of three sliders, A), **LOCK KEY** (L), **COPY**, **PASTE**, **CLEAR**. Under them **MAKE THIS KEY**: two rows of six small buttons (kick, tom, perc, zap, snare, clap, rim, bell, closed hat, open hat, cymbal, any). A locked key turns the header black and veils the knobs ("KEY LOCKED · LOCK KEY (L) unlocks it").
 - **Engine bar**: ENGINE 1 to N buttons, each sitting right under its group of keys on the strip, and an **FX + MASTER** tab (F).
-- **Knob grid**: the key's sound as knobs, in rows of sections, on one grid shared by every engine. The two rightmost columns hold the key's **FX SEND** (REVERB only now, see 5) and its big **LEVEL** knob, with an **AUTO** chip above LEVEL showing the key's trim ("AUTO -3.5dB"; press it to re-measure). The grid for the new engine is laid out from section 4's parameters (about 50 knobs). Keep it to whole rows; check every knob sits on the shared column positions.
+- **Knob grid**: the key's sound as knobs, in rows of sections, on one grid shared by every engine. The two rightmost columns hold the key's **FX SEND** (REVERB only now, see 5) and its big **LEVEL** knob, with an **AUTO** chip above LEVEL showing the key's trim ("AUTO -3.5dB"; press it to re-measure). The grid for the new engine is laid out from section 4's parameters: 47 sound knobs in four rows of 13 columns, plus the two OUTPUT columns (4.2 has the layout). Modulation amounts are not knobs on the grid: they live in each knob's **modulation popup** (2.2). Keep it to whole rows; check every knob sits on the shared column positions.
 - **Status line** at the bottom: what just happened, what was kept ("locked DECAY, CUTOFF kept"), and the zones.
 
 ### 2.2 Knobs
@@ -62,6 +62,15 @@ These are the features of LXR-AFX at `6b3aa30`, minus the engine, with the chang
 - Press and drag up or down. A hand edit **lights the knob's label**, a notch outside the ring marks the value it had, and a **double-click puts it back**. The key header counts the edits.
 - **Plus-minus knobs** (pan, tune, bipolar amounts) have their centre at the top and light outwards. PAN reads L100 … C … R100.
 - **Padlock** at each knob's top right (faint open, solid closed). See 2.6.
+- **Modulation popup (right-click a knob)**: a right-click (a two-finger click on a trackpad) on a sound knob opens a small popup next to it, titled with the knob ("CUTOFF · MODULATION"), with one row per source: **MOD ENV**, **LFO**, **VELOCITY**. Each row is a flat horizontal fader with its amount (plus-minus, centre = none, lit outwards like a bipolar knob, the value in the knob's own units: "+24 st", "-0.35"). The popup sits on the grid: each fader row spans the cells of the popup's width, and the popup is placed so it doesn't cover its own knob.
+  - Faders follow the knob rules: they change only on click and drag (no wheel, arrow keys, focus rings or hover), the drag ends on any move with the button up, lost pointer capture, window blur and a hidden tab, and a **double-click puts a fader back** to the value it had when the popup opened. **CLEAR** in the popup sets every amount for that knob to none.
+  - The popup closes on a click outside it, on Escape, on a second right-click on the knob, and when another key is picked. It never opens on hover. Only one popup is open at a time.
+  - Like a knob, a fader edits only the key played, counts as a hand edit (it lights the knob's label), is undoable, and is glided in the engine (4.1).
+  - **Showing modulation without opening the popup**: a knob with any amount other than none shows a small mark beside its label (for example a dot per source) and a thin arc outside its ring showing how far the modulation reaches from the knob's value (the largest of its sources, MOD ENV and LFO in one direction or both, VELOCITY from soft to hard). Hide nothing: everything that shapes the sound is visible on the grid, even if its amount is set in the popup.
+  - The source settings themselves (MOD ENV DECAY and CURVE, LFO RATE and SHAPE) stay as knobs on the grid, since every destination shares them.
+  - **Padlocks**: a closed padlock on a knob keeps its modulation amounts too.
+  - **LEARN**: a fader can be learned like a knob (press LEARN, click the fader, turn a hardware knob).
+  - Right-click on a non-sound control (OUTPUT, FX, the strip) does nothing and shows no browser menu. On the phone there are no knobs and no popup.
 - Values are continuous (section 4). A knob may show soft labels along its range (for example a table position or filter morph reading "LP > BP 40"), but there are no menus and no switches in a sound.
 
 ### 2.3 Keys, engines and playing
@@ -193,7 +202,7 @@ Generic parts of `app/main.js` to lift (as is or nearly): `dragger` (with all it
 - **Percussion only.** One-shot sounds, triggered by a key, no sustain stage, no polyphony inside an engine.
 - **Every parameter is continuous** and stored as a normalised float (0..1, or -1..1 for bipolar), mapped to real units by a curve (log for frequencies and times). No menus, no switches, no discrete settings in a sound. Where an old design would use a switch, use a continuous blend.
 - **Morph-friendly**: any two sounds can be interpolated parameter by parameter and every point between them is a sensible sound (section 7). A part is switched off by its level reaching zero, never by a switch.
-- **Smooth**: every parameter change (a knob, a CC, a morph, a modulation) is glided (about 5 to 10 ms) and must never click, zipper or jump in level. A parameter changed while a note sounds takes effect smoothly, on the note that is playing.
+- **Smooth**: every parameter change (a knob, a fader in a modulation popup, a CC, a morph, a modulation) is glided (about 5 to 10 ms) and must never click, zipper or jump in level. A parameter changed while a note sounds takes effect smoothly, on the note that is playing.
 - **Repeatable**: oscillator phases reset at each note start (with a START PHASE control), noise is seeded per note from the sound, so a sound plays the same every time (needed for auto level and for the rating mode).
 - **Click-free retrigger**: a new note on an engine that is still sounding fades the old tail out over 2 to 4 ms while the new note starts.
 - **A voice ends** when its output stays below -90 dB for 50 ms (so comb and formant tails aren't cut).
@@ -210,10 +219,17 @@ OSC A (wavetable) ─┐  ← cross-FM →  ┌─ OSC B (wavetable)
 NOISE ────────────────────┤
 CLICK (generated) ────────┤ (a share of the click can bypass the filters)
                           ▼
-                AMP ENVELOPE → DRIVE → MORPH FILTER (LP ↔ BP ↔ HP) → COMB → FORMANT → LEVEL · TRIM · PAN → dry + REVERB send
+                AMP ENVELOPE → DRIVE → FILTER 1 (LP ↔ BP ↔ HP) → FILTER 2 (COMB ↔ VOWEL) → LEVEL · TRIM · PAN → dry + REVERB send
 ```
 
-Modulation sources: AMP ENV, PITCH ENV, MOD ENV, LFO, VELOCITY. Each source reaches its destinations through continuous amounts (zero = no effect), never through a destination menu.
+Modulation: PITCH ENV is wired to pitch (its AMOUNT knob). The three general sources, **MOD ENV**, **LFO** and **VELOCITY**, can reach **any continuous sound parameter** through a continuous amount per source and destination (zero = no effect), set in that knob's modulation popup (2.2), never through a destination menu. Not modulatable: TABLE (a reference), NOISE SEED (it is read at note start; velocity may still move it), and the OUTPUT controls (level, pan, send, trim are the mix, not the sound).
+
+- Amounts are stored like any parameter: normalised -1..+1 and glided, with ids of the form `<source>><destination>` (`lfo>cutoff`, `vel>decay`, `env>pos_a`). A sound stores only the amounts that aren't zero, and a missing amount is zero, so adding destinations later never breaks a sound (8).
+- Each amount maps to the destination's units through a depth set per destination in the schema (for example: pitch ±24 st from the LFO; cutoff ±96 st from MOD ENV, ±48 st from the LFO and VELOCITY; a 0..1 parameter by up to its whole range). Modulation adds in the normalised domain before the destination's curve, and the sum is clamped to the parameter's range, so a frequency moves in pitch and a time in log time.
+- **MOD ENV** is unipolar (0 at the end of its decay); the amount scales and signs it. **LFO** is bipolar. **VELOCITY** is centred on velocity 100: harder hits move by +amount, softer by up to -amount (so at velocity 100 a sound plays as set, which auto level and the rating mode rely on). VELOCITY is read once at note start; a destination it moves is held for the note.
+- **Each amount is a gate of nothing but itself** (7.2).
+- The engine applies modulation only to destinations with a non-zero amount, so an unmodulated sound costs no more; destinations read per sample where they are audio-rate safe (pitch, FM depth, positions, cutoff, comb pitch), per block of 16 samples elsewhere, glided so nothing zippers.
+- The schema marks for each destination the depth per source and which sources it takes, and the randomisers use a **curated set** of routes (7.2 and 6.4): the useful ones a percussion sound reaches for, listed below. Johnny can still set any route by hand.
 
 Parameters (labels are suggestions; ranges in real units; "gate" marks the level that turns a part off, see 7.2):
 
@@ -229,7 +245,7 @@ Parameters (labels are suggestions; ranges in real units; "gate" marks the level
 **FM**
 - A > B 0..1 (**gate**): A modulates B's phase
 - B > A 0..1 (**gate**): B modulates A's phase (both together = cross-FM, which must stay stable, never blow up)
-- FM ENV: how much of the FM depth decays with the MOD ENV (0 = steady FM, 1 = FM only at the attack)
+- (FM that decays with the attack is MOD ENV on A > B and B > A, set in their popups; it was a separate FM ENV knob)
 
 **NOISE**
 - LEVEL 0..1 (**gate**)
@@ -256,44 +272,47 @@ Parameters (labels are suggestions; ranges in real units; "gate" marks the level
 - DECAY 1 ms..2 s
 - CURVE -1..+1
 
-**MOD ENV** (one envelope with several amounts)
+**MOD ENV** (a source: its amounts are in the popups)
 - DECAY 1 ms..4 s, CURVE -1..+1
-- to FM depth: the FM ENV control above
-- to POS A, to POS B -1..+1
-- to CUTOFF -96..+96 semitones
-- to COMB pitch -48..+48 semitones
+- curated routes: A > B, B > A (FM at the attack), POS A, POS B, CUTOFF (±96 st), FILTER 2 PITCH (±48 st)
 
-**LFO** (free running per note, restarts at note start)
+**LFO** (a source, free running per note, restarts at note start; its amounts are in the popups)
 - RATE 0.05 Hz..2 kHz (audio rate for growls and metallic buzz)
 - SHAPE 0..1: sine → triangle → saw → square → smooth random, continuous
-- amounts (each **gate** of nothing but itself): to PITCH ±24 st, to POS A ±1, to POS B ±1, to CUTOFF ±48 st, to FM ±1, to LEVEL 0..1
+- curated routes: TUNE (±24 st), POS A, POS B, CUTOFF (±48 st), A > B, B > A, OSC A LEVEL (tremolo)
 
-**VELOCITY** amounts (0 = velocity ignored): to LEVEL 0..1, to PITCH ENV amount ±1, to CUTOFF ±48 st, to FM ±1, to CLICK level ±1, to DECAY ±1
+**VELOCITY** (a source, no knobs of its own: velocity ignored until a popup sets an amount)
+- curated routes: AMP DECAY, PITCH ENV AMOUNT, CUTOFF (±48 st), A > B, B > A, CLICK LEVEL. Loudness by velocity is the key's level and is always on (as now); a VELOCITY amount on a gate such as OSC A LEVEL makes one part louder than the rest on hard hits.
 
 **DRIVE** (before the filter): AMOUNT 0..1 (0 = clean, unity), a smooth saturation with its level compensated, so turning it up changes the tone more than the loudness.
 
-**MORPH FILTER** (section 4.4)
+**FILTER 1**, the morph filter (section 4.4)
 - MORPH 0..1: LP (0) → BP (0.5) → HP (1), continuous
 - CUTOFF 20 Hz..20 kHz
 - RESONANCE 0..1 (up to the edge of self-oscillation, never unstable)
 - TRACK 0..1: cutoff follows the sound's pitch (with the pitch envelope)
-- ENV: the MOD ENV amount above
 
-**COMB** (a tuned resonator)
+**FILTER 2** (one heading for the comb and the vowel filter; Johnny, 2026-11-18: "you can choose either")
 - MIX 0..1 (**gate**)
-- PITCH 20 Hz..8 kHz, plus TRACK 0..1 to follow the sound's pitch
-- FEEDBACK -0.98..+0.98 (positive: all harmonics, a tube or string; negative: odd harmonics, hollow; the level is compensated so high feedback doesn't jump in loudness)
-- DAMP 0..1: a low-pass inside the loop, so the ring darkens as it decays
-
-**FORMANT** (a vowel filter)
-- MIX 0..1 (**gate**)
-- VOWEL 0..1: a continuous path through five vowels (A, E, I, O, U), formant frequencies, widths and levels interpolated between neighbours (use published average formant data)
-- SHIFT -12..+12 semitones (moves all formants)
-- Q 0..1 (how sharp the formants are)
+- COMB > VOWEL 0..1: which of the two it is, as a **continuous blend**, not a switch. 0 is the comb (a tuned resonator), 1 the vowel filter, and between them both run in parallel and crossfade (equal power, level matched within ±2 dB), so two sounds on different sides still morph. The knob shows soft labels: "COMB", "VOWEL", "COMB 70 / VOWEL 30".
+- PITCH 20 Hz..8 kHz: the comb's pitch; for the vowel filter it moves all formants by the interval from 500 Hz, held within ±12 semitones
+- TRACK 0..1: follow the sound's pitch (both)
+- RESONANCE -0.98..+0.98: the comb's feedback (positive: all harmonics, a tube or string; negative: odd harmonics, hollow; level compensated, so high feedback doesn't jump in loudness). For the vowel filter, how sharp the formants are (its size; the sign doesn't matter)
+- DAMP 0..1: the comb's low-pass inside the loop, so the ring darkens as it decays; for the vowel filter, the upper formants softened
+- VOWEL 0..1: a continuous path through five vowels (A, E, I, O, U), formant frequencies, widths and levels interpolated between neighbours (use published average formant data). Only the vowel side uses it; it is drawn dim while COMB > VOWEL is at 0
 
 **OUTPUT (per key, part of the mix, not the sound)**: LEVEL, PAN, REVERB send, TRIM (from auto level). These are not randomised by ALTER and are kept by new sounds, as in LXR-AFX.
 
-That is about 60 parameters. Lay them out on the grid in four or five rows of sections, for example: OSC A · OSC B · FM · NOISE / CLICK · AMP · PITCH / DRIVE · FILTER · COMB · FORMANT / MOD ENV · LFO · VELOCITY, with FX SEND and LEVEL in the two right-hand columns. Hide nothing; if it doesn't fit at 1280 x 700 scaled, discuss with Johnny before adding pages.
+That is 47 knobs on the grid (the modulation amounts, which were 17 more knobs, are in the popups). The grid has 15 columns: 13 for the sound, then FX SEND and LEVEL. Four rows, with a section never split across rows:
+
+| row | sections (knobs) |
+|---|---|
+| 1 | OSC A (5) · OSC B (6) · FM (2) |
+| 2 | NOISE (4) · CLICK (5) · PITCH ENV (3) · DRIVE (1) |
+| 3 | AMP (6) · FILTER 1 (4) · MOD ENV (2) · one spare cell |
+| 4 | FILTER 2 (7) · LFO (2) · OUTPUT PAN (1) · three spare cells |
+
+Every knob sits on the shared column positions, lined up with the knobs above and below. Fewer rows than the five planned before means bigger knobs at 1280 x 700 scaled. Hide nothing; if it doesn't fit, discuss with Johnny before adding pages.
 
 ### 4.3 Wavetables
 
@@ -326,7 +345,7 @@ The LXR-AFX filter-type knob clicked and jumped in level between types. Treat th
 - **Matched level across the morph**: with pink noise in, at any cutoff from 100 Hz to 8 kHz and any resonance up to 0.7, the output loudness (K-weighted) at every MORPH position stays within ±1.5 dB of the LP end. Compensate with a gain curve over MORPH and RESONANCE, worked out by measurement and stored as a small table, not by ear.
 - The BP point is a normalised band-pass (its peak at unity), not one whose level falls as resonance rises.
 - Resonance up to its top must stay stable at every cutoff, including with the drive before it and the cutoff at 20 kHz at high sample rates.
-- The same rules apply to the COMB's FEEDBACK (level compensated, no jump when it crosses zero) and the FORMANT's VOWEL (smooth between vowels, level matched within ±2 dB).
+- The same rules apply to FILTER 2: RESONANCE on the comb side (level compensated, no jump when it crosses zero), VOWEL (smooth between vowels, level matched within ±2 dB) and COMB > VOWEL (the crossfade level matched within ±2 dB).
 
 ---
 
@@ -390,12 +409,12 @@ A **RATE** tab beside the engine buttons and FX + MASTER (R). On the same grid a
 Every one keeps locked keys, closed padlocks and the key's send, applies the pan rule (2.5) and auto level, skips duds, and says in the message line what it made and what it kept.
 
 - **LIBRARY**: a kept sound as it is (a different one from the key's current sound).
-- **BREED**: two kept sounds crossed section by section (OSC A, OSC B with FM, NOISE, CLICK, AMP with PITCH ENV, DRIVE with FILTER, COMB, FORMANT, MOD ENV with LFO and VELOCITY), at least one section from each parent, then every parameter nudged a little (6% of its range). Prefer parents of the same type.
+- **BREED**: two kept sounds crossed section by section (OSC A, OSC B with FM, NOISE, CLICK, AMP with PITCH ENV, DRIVE with FILTER 1, FILTER 2, and the modulation: MOD ENV and LFO settings with every amount), at least one section from each parent, then every parameter nudged a little (6% of its range). Prefer parents of the same type.
 - **MORPH**: two kept sounds blended at a random point between 25% and 75%, by the morph rules of section 7.
 - **STYLE**: every parameter takes a value that some kept sound of the same type has for it (each parameter from a different sound).
 - **FREE**: every parameter anywhere in its safe range. The wildest.
 - **RECIPE / MAKE THIS KEY**: a sound of a named type. With 5 or more keepers of that type, the recipe is learned: each parameter drawn between the 10th and 90th percentile of the keepers of that type (correlated parameters such as tune and pitch-env amount drawn from the same keeper, then nudged). With fewer, a **starter recipe** written for the new engine (hand-tuned ranges for each type: a kick is a sine-ish table, low tune, a big fast pitch drop, short click; a closed hat is noise and high FM metal through the HP end of the filter, very short; and so on). ANY picks a type at random. A type button is never greyed out, since a starter recipe always exists.
-- **ALTER / ALTER KEY / ALTER ALL**: nudge each parameter around the sound's home by the HOW MUCH amount, within the parameter's safe range (WILD: its whole range). ALTER doesn't move OUTPUT (level, pan, send) and doesn't change a TABLE (it may move POSITION).
+- **ALTER / ALTER KEY / ALTER ALL**: nudge each parameter around the sound's home by the HOW MUCH amount, within the parameter's safe range (WILD: its whole range). ALTER doesn't move OUTPUT (level, pan, send) and doesn't change a TABLE (it may move POSITION). It nudges the modulation amounts a sound has, and never adds a route it doesn't have (WILD may add one from the curated set).
 - **Safe ranges**: each parameter has a "percussion-safe" range in the schema, the range FREE and ALTER use. Start with sensible ranges by hand, then, once the library has 100 or more sounds, tighten them to what the keepers use (plus a margin).
 
 ---
@@ -415,8 +434,8 @@ In the RANDOM menu, under INIT PATCH, with captions ("LOWEST KEY TO HIGHEST, STE
 
 ### 7.2 The blend rules
 
-- **Every parameter slides**: interpolate in the normalised domain (so frequencies and times move evenly in pitch and in log time, not in Hz or ms).
-- **A part that is off on one side borrows from the side where it's on.** If a gate is zero in sound A (OSC A or B LEVEL, A > B, B > A, NOISE LEVEL, CLICK LEVEL, PITCH ENV AMOUNT, COMB MIX, FORMANT MIX, each LFO or velocity amount), that part's other settings are taken from sound B along the whole morph, so its gate fades it in with B's settings rather than passing through settings neither sound has. Each gate lists its dependents in the schema (for example NOISE LEVEL gates COLOUR, DECAY and SEED; COMB MIX gates PITCH, TRACK, FEEDBACK and DAMP).
+- **Every parameter slides**: interpolate in the normalised domain. Modulation amounts are parameters like any other: an amount that one sound has and the other doesn't slides from its value to zero (a missing amount is zero), so a morph fades a route in or out (so frequencies and times move evenly in pitch and in log time, not in Hz or ms).
+- **A part that is off on one side borrows from the side where it's on.** If a gate is zero in sound A (OSC A or B LEVEL, A > B, B > A, NOISE LEVEL, CLICK LEVEL, PITCH ENV AMOUNT, FILTER 2 MIX, each modulation amount), that part's other settings are taken from sound B along the whole morph, so its gate fades it in with B's settings rather than passing through settings neither sound has. Each gate lists its dependents in the schema (for example NOISE LEVEL gates COLOUR, DECAY and SEED; FILTER 2 MIX gates COMB > VOWEL, PITCH, TRACK, RESONANCE, DAMP and VOWEL).
 - **OUTPUT** (level, pan, send, trim) is not morphed by MORPH KEYS: each key keeps its own send, pan follows the pan rule, trim comes from auto level.
 
 ### 7.3 Tables
@@ -434,7 +453,7 @@ In the RANDOM menu, under INIT PATCH, with captions ("LOWEST KEY TO HIGHEST, STE
 
 All new, with no ties to LXR-AFX's.
 
-- **Sound** (JSON): `{ v: 1, name, type, from, params: { id: number, ... }, tables: { a: ref, a2?: ref, ab?: number, b: ref, ... } }`. Parameters by id (never by position), normalised floats. Unknown ids are ignored; missing ids take their default, so adding parameters later never breaks a sound.
+- **Sound** (JSON): `{ v: 1, name, type, from, params: { id: number, ... }, mod: { 'lfo>cutoff': number, ... }, tables: { a: ref, a2?: ref, ab?: number, b: ref, ... } }`. Parameters by id (never by position), normalised floats. Unknown ids are ignored; missing ids take their default, so adding parameters later never breaks a sound. `mod` holds only non-zero amounts (normalised -1..+1); a missing amount is zero.
 - **Patch / preset** (JSON): `{ v: 1, name, engines, keys: [ by place in layout: { sound, edits, home, lock, out: { level, pan, send, trim } } ], fx: { reverb, dirt, comp, out }, bpm }`.
 - **Export files**: `{ app: 'metamorf', kind: 'presets' | 'library', version: 1, items: [...], tables: { hash: base64 } }`.
 - **localStorage**: the live state (`metamorf-v1`), presets (`metamorf-presets-v1`), colours (`metamorf-colours`). **IndexedDB**: user tables, the library, the bins.
@@ -447,7 +466,7 @@ All new, with no ties to LXR-AFX's.
 Node tests for the engine (no browser), Playwright for the page. Each new part comes with its test.
 
 - **Continuity**: for every parameter, sweep it end to end over 50 ms during a sustained note (and over 2 s), and check for clicks: no sample-to-sample step larger than the steady signal's own largest step plus a small margin, and no burst in the high-passed difference signal. Same for a morph between two random sounds, and for retriggers.
-- **Filter level match** (4.4): pink noise, MORPH swept, cutoff 100 Hz to 8 kHz, resonance 0 to 0.7: within ±1.5 dB of the LP end. COMB feedback across zero, FORMANT across vowels: within ±2 dB.
+- **Filter level match** (4.4): pink noise, MORPH swept, cutoff 100 Hz to 8 kHz, resonance 0 to 0.7: within ±1.5 dB of the LP end. FILTER 2: comb resonance across zero, across vowels, and COMB > VOWEL end to end: within ±2 dB.
 - **Stability**: random sounds (FREE, 10,000 of them, fast offline) never produce NaN, infinity, DC over -40 dB or output over +6 dBFS before the master.
 - **Repeatability**: the same sound and velocity render bit-identically twice.
 - **Morph**: blends at 0 and 1 equal the end sounds exactly; the gate rule holds; table pairs crossfade.
@@ -466,9 +485,9 @@ Each step ends live on GitHub Pages, with its tests, small enough for Johnny to 
 2. **Engine core**: the instrument, the worklet, the Worker for offline renders; OSC A and B on the BASIC table, AMP, PITCH ENV, LEVEL/PAN; continuity and repeatability tests.
 3. **Wavetables**: the built-in generators, band-limiting, POSITION; then WAV loading (SETTINGS > WAVETABLES).
 4. **FM, noise, click, drive.**
-5. **Filters**: the morph filter with its level-match table, then COMB, then FORMANT.
-6. **Modulation**: MOD ENV, LFO, VELOCITY, REPEAT.
-7. **The parameter schema and the knob grid** for the whole voice, on the grid at every size.
+5. **Filters**: FILTER 1 (the morph filter) with its level-match table, then FILTER 2: the comb, the vowel filter and the blend between them.
+6. **Modulation**: MOD ENV, LFO, VELOCITY as sources routed to any parameter by amount, REPEAT; tests that an unmodulated sound costs no more and that every route glides without clicks.
+7. **The parameter schema and the knob grid** for the whole voice, on the grid at every size, with the **modulation popup** (right-click), its faders, the modulation marks on the knobs, and page tests for opening, dragging, double-click, CLEAR, closing and padlocks.
 8. **FX and master**: the reverb, the copied distortion, the new compressor, the output limiter, the FX + MASTER tab.
 9. **Auto level and the dud filter.**
 10. **RATE mode and the library**, with starter recipes for generating. Johnny starts rating here; his exports become `sounds/factory.json`.
@@ -490,4 +509,8 @@ Each step ends live on GitHub Pages, with its tests, small enough for Johnny to 
 
 ### Answers (2026-11-18)
 
-Johnny accepted every suggested answer: 1. no licence for now (all rights reserved); 2. four engines; 3. CC 18 → filter MORPH, CC 5 → reverb send; 4. one press per type with Q…P, [ and ], X bins, no star rating; 5. the whole keyboard plays the candidate in RATE; 6. one screen in five rows, scaled at 1280 x 700, and Johnny sees it before any pages are added.
+Johnny accepted every suggested answer: 1. no licence for now (all rights reserved); 2. four engines; 3. CC 18 → filter MORPH, CC 5 → reverb send; 4. one press per type with Q…P, [ and ], X bins, no star rating; 5. the whole keyboard plays the candidate in RATE; 6. one screen, scaled at 1280 x 700, and Johnny sees it before any pages are added.
+
+**Modulation popup (2026-11-18, Johnny):** "right click a knob and a modulation popup appears, with lfo velocity envelope etc as sources with faders setting the amount for each". Folded into 2.1, 2.2, 4.2, 6.4, 7.2, 8 and 10: the 17 modulation amount knobs leave the grid, any continuous sound knob can be a destination, and the grid becomes four rows of 13 instead of five.
+
+**FILTER 2 (2026-11-18, Johnny):** "The formant and comb filter can be under one heading, filter 2 … and there can be options in there. You can choose either." The choice is the continuous COMB > VOWEL knob, so sounds still morph; the two filters share PITCH, TRACK, RESONANCE and DAMP, plus VOWEL. FILTER becomes FILTER 1. 47 knobs.
