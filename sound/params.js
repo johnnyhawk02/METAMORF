@@ -1,13 +1,19 @@
 // The sound's parameters: every one continuous, stored as a normalised float (0..1, or -1..1 for a bipolar one) and
 // mapped to real units by a curve. No UI and no audio here: the page, the engine and the tests all read this file.
 //
-// Build step 1 has the stub voice only (a sine with an amp envelope and a pitch envelope). Later steps add the rest of
-// docs/SPEC.md section 4 here, by id: a sound stores its parameters by id, so adding parameters never breaks a sound.
+// Build step 2 has the engine core: two wavetable oscillators (on BASIC until the other tables come in step 3), the amp
+// envelope and the pitch envelope. Later steps add the rest of docs/SPEC.md section 4 here, by id: a sound stores its
+// parameters by id, so adding parameters never breaks a sound.
 //
 // A parameter: { id, label, sec, map, lo, hi, def, safe: [lo, hi] (normalised: where FREE and ALTER go), show(v),
 //   gate: true when it switches its part off at zero, dep: the ids a gate switches off with it }.
 
 const fmtMs = (ms) => (ms < 10 ? ms.toFixed(1) + 'ms' : ms < 1000 ? Math.round(ms) + 'ms' : (ms / 1000).toFixed(ms < 9950 ? 2 : 1) + 's');
+// POSITION on BASIC: where between its shapes (the soft labels; a table of its own names comes with step 3)
+const BASIC_NAMES = ['SINE', 'TRI', 'SAW', 'SQUARE', 'PULSE'];
+const posText = (x) => { const f = x * 4, i = Math.min(3, Math.floor(f)), t = f - i; return t < 0.05 ? BASIC_NAMES[i] : t > 0.95 ? BASIC_NAMES[i + 1] : `${BASIC_NAMES[i]}>${BASIC_NAMES[i + 1].slice(0, 3)} ${Math.round(t * 100)}`; };
+// RATIO: shown to two places, with a whole ratio named when it is close (the knob never snaps)
+const ratioText = (r) => (Math.abs(r - Math.round(r)) < 0.01 && r >= 0.99 ? '×' + Math.round(r) : '×' + (r < 10 ? r.toFixed(2) : r.toFixed(1)));
 const signed = (x, d = 0) => (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toFixed(d);
 
 // the curves, normalised value -> real units
@@ -19,19 +25,26 @@ export const MAPS = {
 };
 
 export const PARAMS = [
-  // OSC A (the stub's sine; the wavetable comes in build step 2)
+  // OSC A
+  { id: 'a_pos', label: 'position', sec: 'osc a', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 1], show: (x) => posText(x) },
   { id: 'a_tune', label: 'tune', sec: 'osc a', map: 'bip', lo: -48, hi: 48, def: 0, safe: [-0.6, 0.7], show: (s) => signed(s, Math.abs(s) < 10 ? 1 : 0) + 'st' },
   { id: 'a_fine', label: 'fine', sec: 'osc a', map: 'bip', lo: -100, hi: 100, def: 0, safe: [-0.3, 0.3], show: (c) => signed(c) + 'c' },
-  { id: 'a_level', label: 'level', sec: 'osc a', map: 'lin', lo: 0, hi: 1, def: 0.8, safe: [0.5, 1], show: (x) => Math.round(x * 100) + '%', gate: true, dep: [] },
+  { id: 'a_level', label: 'level', sec: 'osc a', map: 'lin', lo: 0, hi: 1, def: 0.8, safe: [0.5, 1], show: (x) => Math.round(x * 100) + '%', gate: true, dep: ['a_pos'] },
+  // OSC B: its pitch from A's (RATIO, DETUNE), following A's pitch envelope by TRACK
+  { id: 'b_pos', label: 'position', sec: 'osc b', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 1], show: (x) => posText(x) },
+  { id: 'b_ratio', label: 'ratio', sec: 'osc b', map: 'log', lo: 0.25, hi: 16, def: 1 / 3, safe: [0, 1], show: ratioText },
+  { id: 'b_det', label: 'detune', sec: 'osc b', map: 'bip', lo: -100, hi: 100, def: 0, safe: [-0.3, 0.3], show: (c) => signed(c) + 'c' },
+  { id: 'b_track', label: 'track', sec: 'osc b', map: 'lin', lo: 0, hi: 1, def: 1, safe: [0, 1], show: (x) => Math.round(x * 100) + '%' },
+  { id: 'b_level', label: 'level', sec: 'osc b', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 0.9], show: (x) => Math.round(x * 100) + '%', gate: true, dep: ['b_pos', 'b_ratio', 'b_det', 'b_track'] },
   // AMP
   { id: 'attack', label: 'attack', sec: 'amp', map: 'cube', lo: 0, hi: 200, def: 0, safe: [0, 0.35], show: fmtMs },
   { id: 'hold', label: 'hold', sec: 'amp', map: 'cube', lo: 0, hi: 500, def: 0, safe: [0, 0.4], show: fmtMs },
   { id: 'decay', label: 'decay', sec: 'amp', map: 'log', lo: 5, hi: 8000, def: 0.5, safe: [0.2, 0.75], show: fmtMs },
   { id: 'curve', label: 'curve', sec: 'amp', map: 'bip', lo: -1, hi: 1, def: 0.3, safe: [-0.6, 1], show: (c) => signed(c * 100) },
   // PITCH ENV
-  { id: 'p_amt', label: 'amount', sec: 'pitch', map: 'bip', lo: -48, hi: 96, def: 0.15, safe: [-0.1, 0.6], show: (s) => signed(s, Math.abs(s) < 10 ? 1 : 0) + 'st', gate: true, dep: ['p_decay', 'p_curve'] },
-  { id: 'p_decay', label: 'decay', sec: 'pitch', map: 'log', lo: 1, hi: 2000, def: 0.35, safe: [0.1, 0.7], show: fmtMs },
-  { id: 'p_curve', label: 'curve', sec: 'pitch', map: 'bip', lo: -1, hi: 1, def: 0.5, safe: [-0.5, 1], show: (c) => signed(c * 100) },
+  { id: 'p_amt', label: 'amount', sec: 'pitch env', map: 'bip', lo: -48, hi: 96, def: 0.15, safe: [-0.1, 0.6], show: (s) => signed(s, Math.abs(s) < 10 ? 1 : 0) + 'st', gate: true, dep: ['p_decay', 'p_curve'] },
+  { id: 'p_decay', label: 'decay', sec: 'pitch env', map: 'log', lo: 1, hi: 2000, def: 0.35, safe: [0.1, 0.7], show: fmtMs },
+  { id: 'p_curve', label: 'curve', sec: 'pitch env', map: 'bip', lo: -1, hi: 1, def: 0.5, safe: [-0.5, 1], show: (c) => signed(c * 100) },
 ];
 export const BY_ID = Object.fromEntries(PARAMS.map((p) => [p.id, p]));
 export const SECTIONS = [...new Set(PARAMS.map((p) => p.sec))];

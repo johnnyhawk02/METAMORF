@@ -2,14 +2,15 @@
 // knobs edit the key played last. The sound engine is in engine/ and sound/ (no UI there); the controls, colours and
 // phone view are in this folder.
 import { PARAMS, BY_ID, SECTIONS, BASE, OUT_DEFAULT, TYPES, KEYS, MAX_ENGINES, DEFAULT_ENGINES, DEFAULT_LOW, isBip, showValue, fullParams, clampN,
-  levelText, panText, sendText, panRange, engineOf, zoneOf } from '../sound/params.js?v=mwm45f0r';
-import { free, recipe, alter, RECIPE_TYPES } from '../sound/makers.js?v=mwm45f0r';
-import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm45f0r';
-import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm45f0r';
-import { presetName } from './names.js?v=mwm45f0r';
-import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm45f0r';
-import { setupColours } from './colours.js?v=mwm45f0r';
-import { setupPhone } from './phone.js?v=mwm45f0r';
+  levelText, panText, sendText, panRange, engineOf, zoneOf } from '../sound/params.js?v=mwm5a0zk';
+import { free, recipe, alter, RECIPE_TYPES } from '../sound/makers.js?v=mwm5a0zk';
+import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm5a0zk';
+import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm5a0zk';
+import { presetName } from './names.js?v=mwm5a0zk';
+import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm5a0zk';
+import { setupColours } from './colours.js?v=mwm5a0zk';
+import { setupPhone } from './phone.js?v=mwm5a0zk';
+import { render as renderOffline } from './offline.js?v=mwm5a0zk';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2); // C3 = 60
@@ -96,7 +97,7 @@ const send = (m) => { if (node) node.port.postMessage(m); };
 async function startAudio() {
   if (ctx) { if (ctx.state !== 'running') await ctx.resume(); return; }
   ctx = new AudioContext({ latencyHint: 'interactive' });
-  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm45f0r', import.meta.url));
+  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm5a0zk', import.meta.url));
   node = new AudioWorkletNode(ctx, 'metamorf', { numberOfInputs: 0, outputChannelCount: [2] });
   node.port.onmessage = (e) => { if (e.data.type === 'peaks') { showPeaks(e.data.peaks); showSc(e.data.sc || 0); } };
   node.connect(ctx.destination);
@@ -310,9 +311,9 @@ $('fx-tab').addEventListener('click', () => { S.view = S.view === 'fx' ? 'synth'
 // lined up with the ones above and below. The last two columns are the key's own: its FX SEND in row 1, its big
 // LEVEL under it. Rules sit on cell edges
 // ---------------------------------------------------------------------------------------------------------------
-const GRID_COLS = 14, GRID_ROWS = 4;
-const ROWS = [['osc a', 'amp', 'pitch'], ['output']]; // (the whole voice's rows come in build step 7)
-const PART_GATE = { 'osc a': 'a_level', pitch: 'p_amt' }; // a part at zero is greyed (its knobs still turn)
+const GRID_COLS = 13, GRID_ROWS = 4;
+const ROWS = [['osc a', 'osc b'], ['amp', 'pitch env'], ['output']]; // (the whole voice's rows come in build step 7)
+const PART_GATE = { 'osc a': 'a_level', 'osc b': 'b_level', 'pitch env': 'p_amt' }; // a part at zero is greyed (its knobs still turn)
 let knobDraws = [];
 const drawKnobs = () => knobDraws.forEach((d) => d());
 const locked = (e, id) => S.locks[e].includes(id);
@@ -888,5 +889,6 @@ document.fonts?.ready.then(alignEngines);
 // for testing without a controller: metamorf.noteOn(channel, note, velocity), metamorf.cc(number, value)
 window.metamorf = { noteOn: (ch, note, vel = 100) => noteOn(ch, note, vel), noteOff: (note) => noteOff(note), cc: (cc, val) => onCC(cc, val),
   keys: () => S.keys, cur: () => S.cur, engines: () => S.engines, low: () => S.low, fx: () => S.fx, locks: () => S.locks, rand: () => S.rand,
-  presets: { list: () => presets, now: () => S.preset, dirty: presetDirty, import: importPresets }, undoDepth: () => undoStack.length };
+  presets: { list: () => presets, now: () => S.preset, dirty: presetDirty, import: importPresets }, undoDepth: () => undoStack.length,
+  render: (place = S.cur, seconds = 1) => renderOffline(S.keys[place].p, S.keys[place].out, 100, seconds) }; // (an offline render of a key, in the Worker)
 window.metamorfReady = true; // index.html's load check

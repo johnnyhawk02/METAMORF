@@ -42,6 +42,9 @@ for (const [w, h] of [[1440, 900], [1280, 800], [1440, 760], [1280, 700]]) {
   // the longest message fits on the status line
   { const fits = await M(() => { const d = document.getElementById('detail'); d.innerHTML = 'new patch <em>ZORVATRON GIMLAR</em>: reverb send on 8 keys · BPM, FX, master reset · <em>12 locked knobs</em> kept'; return d.scrollWidth <= d.clientWidth + 1; });
     if (!fits) bad('the longest message does not fit'); }
+  // the offline renderer (a Worker) renders the key on screen: a finite sound with a peak
+  { const r = await M(() => metamorf.render(metamorf.cur(), 0.5).then((x) => ({ peak: x.peak, n: x.length, finite: x.L.every(Number.isFinite) }), (e) => ({ error: String(e) })));
+    if (!(r.peak > 0 && r.n > 0 && r.finite)) bad('the offline renderer', r); }
   // ---- a key played (MIDI note 50 = the third key) is the key on screen, its engine's tab lit ----
   await M(() => metamorf.noteOn(1, 50, 90)); await p.waitForTimeout(80); await M(() => metamorf.noteOff(50));
   { const s = await M(() => ({ cur: metamorf.cur(), note: document.getElementById('kh-note').textContent, last: document.getElementById('last-text').textContent, tab: document.querySelector('.snd[aria-selected="true"]')?.textContent }));
