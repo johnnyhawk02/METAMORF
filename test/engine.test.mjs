@@ -4,7 +4,7 @@
 import { Instrument } from '../engine/instrument.js';
 import { PARAMS, BASE, OUT_DEFAULT, fullParams, zoneSizes, engineOf } from '../sound/params.js';
 import { free, recipe, alter, RECIPE_TYPES } from '../sound/makers.js';
-import { basic, read, fft, FRAME, LEVELS } from '../engine/tables.js';
+import { basic, read, fft, LEVELS } from '../engine/tables.js';
 import { renderSound } from '../engine/offline.js';
 let fails = 0, checks = 0;
 const ok = (c, m) => { checks++; if (!c) { fails++; console.log('FAIL', m); } };
@@ -106,32 +106,75 @@ const spectrum = (x) => { // power by bin of a Blackman-Harris windowed block (s
 { const a = basic(), b = basic();
   ok(a.frames === 41 && a.data.length === LEVELS && a.data.every((d, l) => d.every((v, i) => v === b.data[l][i])), 'BASIC is not the same twice');
   ok(a.data.every((d) => d.every(Number.isFinite)), 'BASIC has a sample that is not a number');
-  // each frame's full-band copy peaks at 1, and its first copy at the guard sample repeats the start
-  let worst = 0; for (let f = 0; f < a.frames; f++) { let m = 0; for (let i = 0; i < FRAME; i++) m = Math.max(m, Math.abs(a.data[0][f * (FRAME + 1) + i])); worst = Math.max(worst, Math.abs(m - 1)); }
+  // each frame's full-band copy peaks at 1
+  const N0 = a.size[0], frame = (f) => Array.from({ length: N0 }, (_, i) => a.data[0][f * (N0 + 5) + 2 + i]);
+  let worst = 0; for (let f = 0; f < a.frames; f++) worst = Math.max(worst, Math.abs(Math.max(...frame(f).map(Math.abs)) - 1));
   ok(worst < 1e-5, 'a BASIC frame does not peak at 1: ' + worst);
   // frame 0 is a sine, frame 20 a saw (harmonics falling as 1/k), the last a narrow pulse (energy in many harmonics)
-  const frame = (f) => Array.from({ length: FRAME }, (_, i) => a.data[0][f * (FRAME + 1) + i]);
-  const sp = (f) => { const re = Float64Array.from(frame(f)), im = new Float64Array(FRAME); fft(re, im, -1); return Array.from({ length: 12 }, (_, k) => Math.hypot(re[k], im[k])); };
+  const sp = (f) => { const re = Float64Array.from(frame(f)), im = new Float64Array(N0); fft(re, im, -1); return Array.from({ length: 12 }, (_, k) => Math.hypot(re[k], im[k])); };
   const s0 = sp(0), s20 = sp(20), s40 = sp(40);
   ok(s0[2] < s0[1] * 1e-4 && s0[3] < s0[1] * 1e-4, 'BASIC frame 0 is not a sine');
   ok(Math.abs(s20[2] / s20[1] - 0.5) < 0.01 && Math.abs(s20[5] / s20[1] - 0.2) < 0.01, 'BASIC frame 20 is not a saw');
   ok(s40[5] / s40[1] > 0.5, 'the last BASIC frame is not a narrow pulse'); }
-// band-limited: a saw at 2950 Hz (at 48 kHz) and a narrow pulse at 7130 Hz: everything off the harmonics stays under
-// -60 dB of the total
-{ const T = basic();
-  for (const [pos, hz] of [[0.5, 2950], [1, 7130], [0.5, 13100]]) {
-    const n = 16384, x = new Float64Array(n); let ph = 0; for (let i = 0; i < n; i++) { x[i] = read(T, pos, ph, hz, fs); ph = (ph + hz / fs) % 1; }
-    const p = spectrum(x), bin = fs / n; let all = 0, off = 0;
-    for (let k = 1; k < n / 2; k++) { all += p[k]; const f = k * bin, h = f / hz, d = Math.abs(h - Math.round(h)) * hz; if (d > 8 * bin || Math.round(h) < 1) off += p[k]; }
-    const db = 10 * Math.log10(off / all); ok(db < -60, `BASIC at ${hz} Hz (position ${pos}): aliasing ${db.toFixed(1)} dB`);
-  } }
-// a pitch sweep through every octave copy: the level never steps (a saw falling from 12 kHz to 30 Hz in 2 s)
-{ const T = basic(), n = 2 * fs; let ph = 0, prev = null, worst = 0, rms = 0, cnt = 0;
-  for (let i = 0; i < n; i++) {
-    const hz = 12000 * Math.pow(30 / 12000, i / n), y = read(T, 0.5, ph, hz, fs); ph = (ph + hz / fs) % 1; rms += y * y; cnt++;
-    if (cnt === 2400) { const r = Math.sqrt(rms / cnt); if (prev !== null && hz < 8000) worst = Math.max(worst, Math.abs(20 * Math.log10(r / prev))); prev = r; rms = 0; cnt = 0; }
+
+// ---- every built-in table from C-2 (MIDI 0, 8.2 Hz; and 4.1 Hz, an octave lower) to C7 (MIDI 108, 4186 Hz), at 48
+// and 44.1 kHz, at five positions: nothing off the harmonics above -60 dB (no aliasing, no interpolation images);
+// every harmonic up to a quarter of the sample rate within 0.5 dB of the table's own (the band-limiting takes
+// nothing from the audible range below that); the low notes keep their highs (to 16 kHz at C-2 and below) ----
+const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+const BUILTINS = [basic()]; // (build step 3 adds the rest here)
+for (const T of BUILTINS) for (const rate of [48000, 44100]) {
+  let worstAlias = -999, worstBand = 0, lowTop = Infinity; const where = [];
+  const pitches = [4.0879, ...Array.from({ length: 19 }, (_, i) => midiHz(i * 6)), midiHz(105), midiHz(107)];
+  for (const hz of pitches) for (const pos of [0, 0.25, 0.5, 0.75, 1]) {
+    // the reference: this frame's own spectrum, from the full-band copy
+    const N0 = T.size[0], fp = pos * (T.frames - 1), f0 = Math.min(fp | 0, T.frames - 2), ff = fp - f0, ref = new Float64Array(N0), rim = new Float64Array(N0);
+    for (let i = 0; i < N0; i++) ref[i] = T.data[0][f0 * (N0 + 5) + 2 + i] * (1 - ff) + T.data[0][(f0 + 1) * (N0 + 5) + 2 + i] * ff;
+    fft(ref, rim, -1); const want = (k) => Math.hypot(ref[k], rim[k]) / (N0 / 2);
+    const n = hz < 30 ? 1 << 19 : hz < 300 ? 1 << 17 : 1 << 15, x = new Float64Array(n); let ph = 0;
+    for (let i = 0; i < n; i++) { x[i] = read(T, pos, ph, hz, rate); ph += hz / rate; ph -= Math.floor(ph); }
+    const p = spectrum(x), bin = rate / n; let all = 0, off = 0;
+    const harm = new Float64Array(Math.floor(rate / 2 / hz) + 2);
+    for (let k = 1; k < n / 2; k++) { all += p[k]; const h = k * bin / hz, hk = Math.round(h); if (Math.abs(h - hk) * hz > 8 * bin || hk < 1) off += p[k]; else harm[hk] += p[k]; }
+    const db = 10 * Math.log10(off / all); if (db > worstAlias) { worstAlias = db; where[0] = `${hz.toFixed(1)} Hz pos ${pos}`; }
+    // (the window's power gain: compare with the fundamental, as ratios of the table's own)
+    const g1 = Math.sqrt(harm[1]) / want(1);
+    let top = 0;
+    for (let k = 2; k < harm.length && k * hz < rate / 2; k++) {
+      const w = want(k); if (w < want(1) * 1e-4) continue; // (harmonics under -80 dB of the fundamental: too faint to judge)
+      const got = 20 * Math.log10(Math.sqrt(harm[k]) / g1 / w);
+      if (got > -0.5) top = k * hz; else if (k * hz <= rate * 0.24 && -got > worstBand) { worstBand = -got; where[1] = `${hz.toFixed(1)} Hz pos ${pos}, harmonic ${k}`; }
+    }
+    if (hz < 9 && pos === 0.5) lowTop = Math.min(lowTop, top);
   }
-  ok(worst < 1, `a saw sweeping down: the level steps by ${worst.toFixed(2)} dB between 50 ms blocks`); }
+  console.log(`  ${T.name} at ${rate}: worst aliasing ${worstAlias.toFixed(1)} dB (${where[0]}), worst loss under ${rate * 0.24} Hz ${worstBand.toFixed(2)} dB, a saw at C-2 and below reaches ${Math.round(lowTop)} Hz`);
+  ok(worstAlias < -60, `${T.name} at ${rate}: aliasing ${worstAlias.toFixed(1)} dB at ${where[0]}`);
+  ok(worstBand < 0.5, `${T.name} at ${rate}: a harmonic under a quarter of the rate lost ${worstBand.toFixed(2)} dB at ${where[1]}`);
+  ok(lowTop >= 15500, `${T.name} at ${rate}: a saw at C-2 and below only reaches ${lowTop} Hz`);
+}
+// no stepping: a saw and a narrow pulse sweeping from C7 down to C-2 and back over 4 s: the level of each 50 ms
+// stays within 1.5 dB of its neighbour, and the waveform never jumps (a change of copy is a crossfade)
+for (const pos of [0.5, 1]) { const T = BUILTINS[0], n = 4 * fs; let ph = 0, prev = null, worst = 0, at = 0, rms = 0, cnt = 0, jump = 0, last = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i < n / 2 ? i / (n / 2) : 2 - i / (n / 2), hz = midiHz(108 - 108 * t), y = read(T, pos, ph, hz, fs);
+    ph += hz / fs; ph -= Math.floor(ph); rms += y * y; cnt++;
+    if (cnt === 2400) { const r = Math.sqrt(rms / cnt); if (prev !== null && hz > 400) { /* (a block of at least twenty cycles: fewer read uneven) */ const st = Math.abs(20 * Math.log10(r / prev)); if (st > worst) { worst = st; at = hz; } } prev = r; rms = 0; cnt = 0; }
+    // the same phase read a hair higher in pitch: a crossfade never jumps
+    const y2 = read(T, pos, ph, hz * 1.0001, fs), y1 = read(T, pos, ph, hz, fs); jump = Math.max(jump, Math.abs(y2 - y1)); last = y;
+  }
+  // (a 50 ms block spans almost 3 semitones of this sweep: a narrow pulse, whose top octave carries much of its
+  // level, may lose up to 1.5 dB of it smoothly over the crossfade to the next copy; a step would show as a jump)
+  ok(worst < 1.5, `a sweep at position ${pos}: the level steps by ${worst.toFixed(2)} dB between 50 ms blocks (at ${at.toFixed(0)} Hz)`);
+  ok(jump < 0.01, `a sweep at position ${pos}: the waveform jumps by ${jump.toFixed(4)} for a pitch change of 0.0001`); }
+// above C7: a pitch envelope can push a note right up to the top (0.45 of the rate); still nothing aliased
+{ const T = BUILTINS[0]; let worst = -999;
+  for (const hz of [6000, 9000, 15000, 21000]) for (const pos of [0.5, 1]) {
+    const n = 1 << 15, x = new Float64Array(n); let ph = 0; for (let i = 0; i < n; i++) { x[i] = read(T, pos, ph, hz, fs); ph = (ph + hz / fs) % 1; }
+    const p = spectrum(x), bin = fs / n; let all = 0, off = 0;
+    for (let k = 1; k < n / 2; k++) { all += p[k]; const h = k * bin / hz; if (Math.abs(h - Math.round(h)) * hz > 8 * bin || Math.round(h) < 1) off += p[k]; }
+    worst = Math.max(worst, 10 * Math.log10(off / all));
+  }
+  ok(worst < -60, `above C7: aliasing ${worst.toFixed(1)} dB`); }
 // OSC B: RATIO 2 an octave above A, TRACK 0 holds B still while A sweeps, its level 0 silences it
 { const only = (p) => renderSound({ ...BASE, a_level: 0, b_level: 0.8, p_amt: 0, decay: 0.8, hold: 0.5, ...p }, OUT_DEFAULT, 100, 0.25, fs).L;
   const zc = (x) => { let c = 0; for (let i = fs / 20; i < fs / 5; i++) if (x[i - 1] < 0 && x[i] >= 0) c++; return c / 0.15; };

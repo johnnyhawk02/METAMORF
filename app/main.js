@@ -2,15 +2,15 @@
 // knobs edit the key played last. The sound engine is in engine/ and sound/ (no UI there); the controls, colours and
 // phone view are in this folder.
 import { PARAMS, BY_ID, SECTIONS, BASE, OUT_DEFAULT, TYPES, KEYS, MAX_ENGINES, DEFAULT_ENGINES, DEFAULT_LOW, isBip, showValue, fullParams, clampN,
-  levelText, panText, sendText, panRange, engineOf, zoneOf } from '../sound/params.js?v=mwm5a0zk';
-import { free, recipe, alter, RECIPE_TYPES } from '../sound/makers.js?v=mwm5a0zk';
-import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm5a0zk';
-import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm5a0zk';
-import { presetName } from './names.js?v=mwm5a0zk';
-import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm5a0zk';
-import { setupColours } from './colours.js?v=mwm5a0zk';
-import { setupPhone } from './phone.js?v=mwm5a0zk';
-import { render as renderOffline } from './offline.js?v=mwm5a0zk';
+  levelText, panText, sendText, panRange, engineOf, zoneOf } from '../sound/params.js?v=mwm5nxnv';
+import { free, recipe, alter, RECIPE_TYPES } from '../sound/makers.js?v=mwm5nxnv';
+import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm5nxnv';
+import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm5nxnv';
+import { presetName } from './names.js?v=mwm5nxnv';
+import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm5nxnv';
+import { setupColours } from './colours.js?v=mwm5nxnv';
+import { setupPhone } from './phone.js?v=mwm5nxnv';
+import { render as renderOffline } from './offline.js?v=mwm5nxnv';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2); // C3 = 60
@@ -97,7 +97,7 @@ const send = (m) => { if (node) node.port.postMessage(m); };
 async function startAudio() {
   if (ctx) { if (ctx.state !== 'running') await ctx.resume(); return; }
   ctx = new AudioContext({ latencyHint: 'interactive' });
-  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm5a0zk', import.meta.url));
+  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm5nxnv', import.meta.url));
   node = new AudioWorkletNode(ctx, 'metamorf', { numberOfInputs: 0, outputChannelCount: [2] });
   node.port.onmessage = (e) => { if (e.data.type === 'peaks') { showPeaks(e.data.peaks); showSc(e.data.sc || 0); } };
   node.connect(ctx.destination);
