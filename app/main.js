@@ -2,17 +2,17 @@
 // knobs edit the key played last. The sound engine is in engine/ and sound/ (no UI there); the controls, colours and
 // phone view are in this folder.
 import { PARAMS, BY_ID, SECTIONS, BASE, OUT_DEFAULT, TYPES, KEYS, MAX_ENGINES, DEFAULT_ENGINES, DEFAULT_LOW, isBip, showValue, fullParams, clampN,
-  levelText, panText, sendText, panRange, engineOf, zoneOf } from '../sound/params.js?v=mwm79h1i';
-import { free, recipe, alter, pickTables, RECIPE_TYPES } from '../sound/makers.js?v=mwm79h1i';
-import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm79h1i';
-import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm79h1i';
-import { presetName } from './names.js?v=mwm79h1i';
-import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm79h1i';
-import { setupColours } from './colours.js?v=mwm79h1i';
-import { setupPhone } from './phone.js?v=mwm79h1i';
-import { render as renderOffline } from './offline.js?v=mwm79h1i';
-import * as WT from './wavetables.js?v=mwm79h1i';
-import { decodeWav, autoSize, SIZES } from './wav.js?v=mwm79h1i';
+  levelText, panText, sendText, panRange, engineOf, zoneOf } from '../sound/params.js?v=mwm7rfj6';
+import { free, recipe, alter, pickTables, RECIPE_TYPES } from '../sound/makers.js?v=mwm7rfj6';
+import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm7rfj6';
+import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm7rfj6';
+import { presetName } from './names.js?v=mwm7rfj6';
+import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm7rfj6';
+import { setupColours } from './colours.js?v=mwm7rfj6';
+import { setupPhone } from './phone.js?v=mwm7rfj6';
+import { render as renderOffline } from './offline.js?v=mwm7rfj6';
+import * as WT from './wavetables.js?v=mwm7rfj6';
+import { decodeWav, autoSize, SIZES } from './wav.js?v=mwm7rfj6';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2); // C3 = 60
@@ -101,7 +101,7 @@ const send = (m) => { if (node) node.port.postMessage(m); };
 async function startAudio() {
   if (ctx) { if (ctx.state !== 'running') await ctx.resume(); return; }
   ctx = new AudioContext({ latencyHint: 'interactive' });
-  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm79h1i', import.meta.url));
+  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm7rfj6', import.meta.url));
   node = new AudioWorkletNode(ctx, 'metamorf', { numberOfInputs: 0, outputChannelCount: [2] });
   WT.attach((m) => send(m), () => drawKnobs());
   node.port.onmessage = (e) => { if (e.data.type === 'peaks') { heard = Math.max(heard, ...e.data.peaks); showPeaks(e.data.peaks); showSc(e.data.sc || 0); } };
@@ -244,7 +244,7 @@ const CC_DEFAULT = {
   20: { t: 'elevel', e: 0, name: 'osc 1 level' }, 21: { t: 'elevel', e: 1, name: 'osc 2 level' }, 22: { t: 'elevel', e: 2, name: 'sub osc level' },
 };
 // the engine's parts a knob of the map waits for, until they are built
-const LATER = { cutoff: 'the filter', reso: 'the filter', f_morph: 'the filter', drive: 'the drive', fm_ab: 'FM' };
+const LATER = { cutoff: 'the filter', reso: 'the filter', f_morph: 'the filter' };
 const ccMap = () => S.ccMap || CC_DEFAULT;
 const OUT_NAMES = { send: 'reverb send', pan: 'pan', level: 'level' };
 const ccTargetName = (t) => (t.t === 'par' ? (BY_ID[t.id] ? `${BY_ID[t.id].sec} ${BY_ID[t.id].label}` : t.id) : t.t === 'out' ? OUT_NAMES[t.k] : t.t === 'randkey' ? 'new sound on the key' : `${ENG(t.e).toLowerCase()} level`);
@@ -324,8 +324,10 @@ $('fx-tab').addEventListener('click', () => { S.view = S.view === 'fx' ? 'synth'
 // LEVEL under it. Rules sit on cell edges
 // ---------------------------------------------------------------------------------------------------------------
 const GRID_COLS = 13, GRID_ROWS = 4;
-const ROWS = [['osc a', 'osc b'], ['amp', 'pitch env'], ['output']]; // (the whole voice's rows come in build step 7)
-const PART_GATE = { 'osc a': 'a_level', 'osc b': 'b_level', 'pitch env': 'p_amt' }; // a part at zero is greyed (its knobs still turn)
+// (as docs/SPEC.md lays out the whole voice: FILTER 1, MOD ENV, FILTER 2 and LFO join in build steps 5 to 7)
+const ROWS = [['osc a', 'osc b', 'fm'], ['noise', 'click', 'pitch env', 'drive'], ['amp'], ['output']];
+// a part at zero is greyed (its knobs still turn); FM is off when both its amounts are
+const PART_GATE = { 'osc a': ['a_level'], 'osc b': ['b_level'], fm: ['fm_ab', 'fm_ba'], noise: ['n_level'], click: ['c_level'], 'pitch env': ['p_amt'], drive: ['drive'] };
 let knobDraws = [];
 const drawKnobs = () => knobDraws.forEach((d) => d());
 const locked = (e, id) => S.locks[e].includes(id);
@@ -340,7 +342,7 @@ const showParam = (p, v) => (POS_OF[p.id] && K().t[POS_OF[p.id]] !== WT.DEFAULT_
 function paramKnob(p) {
   return knob({ label: p.label, min: isBip(p) ? -1 : 0, max: 1, centre: isBip(p) ? 0 : undefined,
     get: () => K().p[p.id], show: (v) => showParam(p, v), was: () => K().o[p.id], lit: () => p.id in K().o,
-    set: (v) => { editParam(p.id, v); detail(`${keyName(S.cur)} ${p.sec.toUpperCase()} ${p.label.toUpperCase()} <em>${showParam(p, v)}</em>`); drawGates(); },
+    set: (v) => { editParam(p.id, v); detail(`${keyName(S.cur)} ${p.sec.toUpperCase()} ${p.label.toUpperCase()} <em>${showParam(p, v)}</em>${p.id === 'c_direct' ? ' · the click skips the filters by this much once they arrive (build step 5)' : ''}`); drawGates(); },
     reset: () => { const w = K().o[p.id]; if (K().lock) lockedMsg(); else if (w !== undefined) { editParam(p.id, w); detail(`${keyName(S.cur)} ${p.label.toUpperCase()} back to <em>${showParam(p, w)}</em>`); drawGates(); } },
     lock: { get: () => locked(engOf(S.cur), p.id), toggle: () => toggleLock(p.id, `${p.sec.toUpperCase()} ${p.label.toUpperCase()}`) },
     learn: { t: 'par', id: p.id } });
@@ -390,7 +392,7 @@ function buildKnobs() {
       const el = sect(list.length);
       el.innerHTML = `<h3>${sec}</h3><div class="row"></div>`;
       for (const p of list) { const k = sec === 'output' ? outKnob(p) : p === 'table' ? tableKnob(tbl) : paramKnob(p); el.querySelector('.row').append(k.el); knobDraws.push(k.draw); }
-      const g = PART_GATE[sec]; if (g) { const d = () => el.classList.toggle('off', !K().p[g]); gateDraws.push(d); knobDraws.push(d); }
+      const g = PART_GATE[sec]; if (g) { const d = () => el.classList.toggle('off', g.every((id) => !K().p[id])); gateDraws.push(d); knobDraws.push(d); }
     }
     if (col <= GRID_COLS) sect(GRID_COLS + 1 - col, ' fill');
   }
@@ -535,7 +537,7 @@ function deal(place, s) {
   if (!keep.includes('out.pan')) { const r = panRange(s.type); k.out.pan = Math.round((rnd() * 2 - 1) * r * 100) / 100; }
 }
 const keptNote = (engines) => {
-  const names = [...new Set(engines.flatMap((e) => S.locks[e]).map((id) => (BY_ID[id] ? BY_ID[id].label : id.startsWith('tbl.') ? 'table' : id.slice(4)).toUpperCase()))];
+  const names = [...new Set(engines.flatMap((e) => S.locks[e]).map((id) => (BY_ID[id] ? `${BY_ID[id].sec} ${BY_ID[id].label}` : id.startsWith('tbl.') ? `osc ${id.slice(4)} table` : id.slice(4)).toUpperCase()))];
   return !names.length ? '' : names.join(', ').length <= 16 ? ` · locked <em>${names.join(', ')}</em> kept` : ` · <em>${names.length} locked knobs</em> kept`;
 };
 const onEngines = () => Array.from({ length: S.engines }, (_, e) => e);

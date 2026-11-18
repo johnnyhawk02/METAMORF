@@ -284,7 +284,7 @@ Parameters (labels are suggestions; ranges in real units; "gate" marks the level
 **VELOCITY** (a source, no knobs of its own: velocity ignored until a popup sets an amount)
 - curated routes: AMP DECAY, PITCH ENV AMOUNT, CUTOFF (±48 st), A > B, B > A, CLICK LEVEL. Loudness by velocity is the key's level and is always on (as now); a VELOCITY amount on a gate such as OSC A LEVEL makes one part louder than the rest on hard hits.
 
-**DRIVE** (before the filter): AMOUNT 0..1 (0 = clean, unity), a smooth saturation with its level compensated, so turning it up changes the tone more than the loudness.
+**DRIVE** (before the filter): AMOUNT 0..1 (0 = clean, unity), a smooth saturation with its level compensated, so turning it up changes the tone more than the loudness. Built (step 4) as tanh at twice the sample rate (half-band filters up and down) with first-order antiderivative anti-aliasing: a 3.1 kHz sine at full drive keeps everything off its harmonics about 50 dB down. A DC blocker (5 Hz) follows it, since cross-FM and drive on a lopsided wave can make some.
 
 **FILTER 1**, the morph filter (section 4.4)
 - MORPH 0..1: LP (0) → BP (0.5) → HP (1), continuous

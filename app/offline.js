@@ -4,7 +4,7 @@
 let worker = null, next = 0;
 const waiting = new Map();
 function start() {
-  worker = new Worker(new URL('../sound/render-worker.js?v=mwm79h1i', import.meta.url), { type: 'module' });
+  worker = new Worker(new URL('../sound/render-worker.js?v=mwm7rfj6', import.meta.url), { type: 'module' });
   worker.onmessage = (e) => { const w = waiting.get(e.data.id); if (!w) return; waiting.delete(e.data.id); if (e.data.error) w.no(new Error(e.data.error)); else w.yes(e.data); };
   worker.onerror = (e) => { for (const w of waiting.values()) w.no(new Error(e.message || 'the renderer stopped')); waiting.clear(); worker = null; };
 }
