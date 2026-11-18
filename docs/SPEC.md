@@ -52,7 +52,7 @@ These are the features of LXR-AFX at `6b3aa30`, minus the engine, with the chang
 - **One screen, nothing scrolls**, laid out for a laptop (1440 x 900 native). Below about 1264 x 850 the whole screen scales down to fit (the old `fitScreen`). Johnny's MacBook Air M1 browser windows are 1440 x 760 and 1280 x 700: both must fit.
 - **LCD look**: one pane of LCD glass, one ink colour, a faint ghost of unlit segments, an offset shadow, the VT323 pixel font, buttons as outlined boxes that invert when pressed or chosen, segmented bars and meters.
 - **Top bar**: logo (METAMORF), PRESET menu (the patch's name, a `*` when unsaved), MIDI status box, LAST box (the last key played and how hard), SETTINGS menu, RANDOM menu, UNDO.
-- **Key panel** (top left): KEY note name and number, its engine and what it plays ("NAME · type · 2 edits"), the **key strip** of all 25 keys (grouped by engine, a padlock on locked keys, a dot on hand-edited keys; click a key to pick and hear it), and a row of buttons: **NEW SOUND** (a flat 2D dice that turns once and changes face a few times in about a third of a second, K), **ALTER KEY** (an icon of three sliders, A), **LOCK KEY** (L), **COPY**, **PASTE**, **CLEAR**. Under them **MAKE THIS KEY**: two rows of six small buttons (kick, tom, perc, zap, snare, clap, rim, bell, closed hat, open hat, cymbal, any). A locked key turns the header black and veils the knobs ("KEY LOCKED · LOCK KEY (L) unlocks it").
+- **Key panel** (top left): KEY note name and number, its engine and what it plays ("NAME · MID · 2 edits"), the **key strip** of all 25 keys (grouped by engine, a padlock on locked keys, a dot on hand-edited keys; click a key to pick and hear it), and a row of buttons: **NEW SOUND** (a flat 2D dice that turns once and changes face a few times in about a third of a second, K), **ALTER KEY** (an icon of three sliders, A), **LOCK KEY** (L), **COPY**, **PASTE**, **CLEAR**. Under them **MAKE THIS KEY**: one row of five buttons, the four groups and ANY (LOW, MID, MID-HIGH, TREBLE, ANY; see 6.1). A locked key turns the header black and veils the knobs ("KEY LOCKED · LOCK KEY (L) unlocks it").
 - **Engine bar**: ENGINE 1 to N buttons, each sitting right under its group of keys on the strip, and an **FX + MASTER** tab (F).
 - **Knob grid**: the key's sound as knobs, in rows of sections, on one grid shared by every engine. The two rightmost columns hold the key's **FX SEND** (REVERB only now, see 5) and its big **LEVEL** knob, with an **AUTO** chip above LEVEL showing the key's trim ("AUTO -3.5dB"; press it to re-measure). The grid for the new engine is laid out from section 4's parameters: 47 sound knobs in four rows of 13 columns, plus the two OUTPUT columns (4.2 has the layout). Modulation amounts are not knobs on the grid: they live in each knob's **modulation popup** (2.2). Keep it to whole rows; check every knob sits on the shared column positions.
 - **Status line** at the bottom: what just happened, what was kept ("locked DECAY, CUTOFF kept"), and the zones.
@@ -91,7 +91,7 @@ These are the features of LXR-AFX at `6b3aa30`, minus the engine, with the chang
 ### 2.5 Randomisers (the RANDOM menu and the key panel)
 
 - **INIT PATCH** (top of the menu): a new patch in one press. Every key gets a fresh sound, levelled and panned as RANDOM ALL deals them; **30% of the keys get a reverb send** (8 of 25, chosen at random, in a range of 45..95 out of 127). Locked keys and hand edits are replaced, so if any key is locked it asks first (press again within four seconds). BPM back to 120; reverb, distortion, compressor and output level back to their defaults; RETURN, engine levels and the knob padlocks stay. A knob with a closed padlock keeps its setting on every key. The patch gets a new name and is unsaved. UNDO brings the old patch back whole.
-- **MORPH KEYS**, **NEW ENDS**, **KICK > HAT**: see section 7.
+- **MORPH KEYS**, **NEW ENDS**, **LOW > TREBLE**: see section 7.
 - **NEW SOUNDS FROM**: the source the dice, RANDOM, RANDOM ALL and INIT PATCH use. In METAMORF: **LIBRARY** (a kept sound as it is; was KIT), **BREED**, **MORPH**, **STYLE** (was KIT-STYLE), **FREE**, **RECIPE**. Section 6 defines each against the sound library.
 - **THIS ENGINE**: RANDOM (every key of the engine gets a new sound), ALTER (nudge every key around what it plays now), LEVEL (even out the keys' loudness without changing the sounds). **ALL ENGINES**: RANDOM ALL, ALTER ALL, LEVEL ALL. Each button has a caption.
 - **HOW MUCH**: the ALTER amount (10% as it comes; ALTER KEY uses it too). **WILD**: ALTER may take a control outside its usual percussion range.
@@ -99,7 +99,7 @@ These are the features of LXR-AFX at `6b3aa30`, minus the engine, with the chang
 - **KNOB PADLOCKS**: the count of closed padlocks and UNLOCK ALL.
 - **ALTER always starts from the sound's "home"** (what it was before the first alter since the last hand edit), so repeated presses vary one sound instead of drifting away.
 - **New sounds keep a key's send** (locked or not).
-- **Pan when randomising**: kicks centred, snares and claps within 20% left or right, everything else anywhere (was per engine type: drum, snare, metal; now per sound type). Set by hand, any pan goes anywhere; the pan padlock keeps it out of the randomisers.
+- **Pan when randomising**: LOW centred, MID within 20% left or right, MID-HIGH and TREBLE anywhere (was per engine type: drum, snare, metal; now per group, 6.1). Set by hand, any pan goes anywhere; the pan padlock keeps it out of the randomisers.
 - **Duds are skipped**: every generated sound is played offline first and thrown away if it is silent (more than 24 dB under its level target), still loud at 1.5 s, clips hard, or produces NaN or DC. Up to 8 tries, then the best try.
 
 ### 2.6 Locks
@@ -116,7 +116,7 @@ These are the features of LXR-AFX at `6b3aa30`, minus the engine, with the chang
 ### 2.8 Auto level
 
 - Every sound a randomiser deals or alters (and a paste, and a MAKE THIS KEY) is played offline, measured, and its key gets a **trim**, a gain of its own, separate from LEVEL. Loudness = the loudest 100 ms of the hit at velocity 100, K-weighted per ITU-R BS.1770, in dB below full scale. The trim brings it to its target, never past full scale, at most +12 dB or -16 dB.
-- **Targets are per sound type** (kick, snare, hats …), set from the median loudness of Johnny's kept sounds of that type once there are enough (5 or more), otherwise one shared starting target (start at -15 dB and adjust by ear). Don't reuse the old numbers.
+- **Targets are per group** (LOW, MID, MID-HIGH, TREBLE), set from the median loudness of Johnny's kept sounds of that group once there are enough (5 or more), otherwise one shared starting target (start at -15 dB and adjust by ear). Don't reuse the old numbers.
 - **AUTO** chip above LEVEL: shows the trim, press to re-measure. **LEVEL / LEVEL ALL** even out the keys as they are. **AUTO LEVEL** off: new sounds play as loud as they come out. Locked keys are left alone. UNDO takes it back.
 - Offline renders run in a Web Worker so the page never stalls.
 
@@ -171,7 +171,7 @@ Generic parts of `app/main.js` to lift (as is or nearly): `dragger` (with all it
 |---|---|---|
 | `sound/schema.js` | `sound/params.js` | Built from section 4 of this spec. The old one is generated from the firmware's front-panel data: don't open it. |
 | `sound/instrument.js`, `sound/worklet.js` | `engine/` (new) and `sound/worklet.js` | A pure JS instrument (no DOM, no Web Audio) that renders float buffers at any rate, so it runs in an AudioWorklet, in a Worker for offline renders, and in node for tests. That architecture is generic; write it fresh. |
-| `sound/level.js` | `sound/level.js` (new) | Same measurement (section 2.8), against the new engine, per-type targets. Write the K-weighting filter from the BS.1770 standard. |
+| `sound/level.js` | `sound/level.js` (new) | Same measurement (section 2.8), against the new engine, per-group targets. Write the K-weighting filter from the BS.1770 standard. |
 | `sound/breed.js`, `sound/makers.js` | `sound/makers.js` (new) | Same ideas (section 6.4), new sections, recipes learned from kept sounds. The old recipe numbers are in the old parameter units: don't carry them. |
 | the compressor (inside the old instrument) | `sound/comp.js` | Johnny wants it rewritten fresh. Same knobs (section 5.3). |
 | the reverb | `sound/reverb.js` | New, similar in feel, not copied (section 5.1). |
@@ -381,39 +381,53 @@ There are no kits. METAMORF's sounds come from Johnny: the app generates sounds,
 
 ### 6.1 Words
 
-- A **sound**: one key's parameters (section 4) plus a name, a type and where it came from.
+- A **sound**: one key's parameters (section 4) plus a name, a group and where it came from.
 - The **library**: the kept sounds. The **factory library** ships with the app as `sounds/factory.json`; Johnny's own kept sounds are in the browser and can be exported and merged into the factory file.
 - A **patch** (or preset): all 25 keys, the engine count, the effects, the master and the BPM (section 2.9).
-- **Types**: kick, tom, perc, zap, snare, clap, rim, bell, closed hat, open hat, cymbal, other. These match the MAKE THIS KEY buttons.
+- **Groups** (Johnny, 2026-11-18: "I don't want too many groups … this leaves room for kind of interesting random sounds"): four broad groups by register, not drum names, so a sound that is neither a kick nor a snare still has a home:
+
+  | id | label | roughly |
+  |---|---|---|
+  | `low` | LOW | kicks, low toms, booms, sub drops |
+  | `mid` | MID | snares, claps, toms, body hits |
+  | `midhigh` | MID-HIGH | rims, percs, blips, zaps, woodblocks |
+  | `treble` | TREBLE | hats, cymbals, bells, shakers, air |
+
+  A sound stores the group's **id**; the label is only shown. Johnny may rename the groups later: a rename changes the label only, so saved sounds, the library and presets never break. They replace the old eleven types everywhere: rating, the library, recipes, MAKE THIS KEY, the pan rule and auto level targets. The group is Johnny's call when he keeps a sound, not measured from it.
 
 ### 6.2 The rating mode
 
 A **RATE** tab beside the engine buttons and FX + MASTER (R). On the same grid as the rest of the screen.
 
 - It shows one **candidate** sound on the normal knob grid, and plays it as soon as it appears. **Space**, the pad, any key on the strip and any MIDI key play it (the whole keyboard plays the candidate while RATE is open; velocity counts).
-- **Type buttons** (the twelve types, with number-row or letter shortcuts shown on them): one press keeps the candidate with that type, names it, adds it to the library and deals the next candidate. Before keeping, Johnny can turn any knob; the kept sound is the tweaked one.
+- **Group buttons** (LOW, MID, MID-HIGH, TREBLE, with the shortcuts 1 2 3 4 shown on them): one press keeps the candidate in that group, names it, adds it to the library and deals the next candidate. Before keeping, Johnny can turn any knob; the kept sound is the tweaked one.
 - **BIN** (X or Backspace): throw it away and deal the next.
 - **BACK**: undo the last verdict (keep or bin) and show that sound again.
-- **GENERATE FROM**: WILD (FREE over each parameter's whole safe range), NEAR KEEPERS (breed or morph two kept sounds, then nudge), and a **type target** ("give me snares": generate around the kept snares, or a starter recipe while there are none). Mix as it comes: mostly WILD while the library is small, more NEAR KEEPERS as it grows.
+- **GENERATE FROM**: WILD (FREE over each parameter's whole safe range), NEAR KEEPERS (breed or morph two kept sounds, then nudge), and a **group target** ("give me MID": generate around the kept MID sounds, or a starter recipe while there are none). Mix as it comes: mostly WILD while the library is small, more NEAR KEEPERS as it grows.
 - Candidates go through the dud filter and auto level before they are shown, so every candidate is playable and about as loud as the last.
-- A counter: kept per type, binned, total. **EXPORT LIBRARY** writes the library as JSON (with any user tables embedded); **IMPORT LIBRARY** merges a file. Committing an exported file as `sounds/factory.json` makes those sounds the factory library.
-- Binned sounds are kept too (parameters and type target only, in IndexedDB, exportable), so a later version can learn what Johnny doesn't like. Nothing uses them yet.
-- On the phone: a simplified RATE screen is welcome later (play, the type buttons, BIN), not in the first version.
+- A counter: kept per group, binned, total. **EXPORT LIBRARY** writes the library as JSON (with any user tables embedded); **IMPORT LIBRARY** merges a file. Committing an exported file as `sounds/factory.json` makes those sounds the factory library.
+- Binned sounds are kept too (parameters and group target only, in IndexedDB, exportable), so a later version can learn what Johnny doesn't like. Nothing uses them yet.
+- **On the phone (Johnny, 2026-11-18: "how I want the phone view to be for generating and evaluating drum hits")**: the phone's main job is rating. A **RATE** screen, reached from the phone MENU and remembered as the phone's view:
+  - A big **PLAY** pad (the top half of the screen) plays the candidate, velocity from where it is touched (harder near the bottom), several taps in a row allowed.
+  - Under it, the four **group** buttons in a 2 x 2 grid, each a big target: a tap keeps the candidate in that group and deals the next one, which plays at once.
+  - **BIN** and **BACK** side by side, then a one-line **GENERATE** choice (WILD, NEAR KEEPERS, or a group target), the counter (kept per group, binned) and the message line.
+  - The candidate's name and where it came from at the top. No knobs: a candidate is kept or binned as it is. The library, export and import stay on the big screen; the phone's keepers go into the same browser library.
+  - The pads screen of 2.12 stays, reached from MENU (PADS / RATE).
 
 ### 6.3 Library browser
 
-- In the RATE tab, a **LIBRARY** list: filter by type, play on hover-free click, rename, re-type, delete (X then SURE?), and **PUT ON KEY** (the sound onto the key last played, undoable).
+- In the RATE tab, a **LIBRARY** list: filter by group, play on hover-free click, rename, move to another group, delete (X then SURE?), and **PUT ON KEY** (the sound onto the key last played, undoable).
 
 ### 6.4 The randomisers, against the library
 
 Every one keeps locked keys, closed padlocks and the key's send, applies the pan rule (2.5) and auto level, skips duds, and says in the message line what it made and what it kept.
 
 - **LIBRARY**: a kept sound as it is (a different one from the key's current sound).
-- **BREED**: two kept sounds crossed section by section (OSC A, OSC B with FM, NOISE, CLICK, AMP with PITCH ENV, DRIVE with FILTER 1, FILTER 2, and the modulation: MOD ENV and LFO settings with every amount), at least one section from each parent, then every parameter nudged a little (6% of its range). Prefer parents of the same type.
+- **BREED**: two kept sounds crossed section by section (OSC A, OSC B with FM, NOISE, CLICK, AMP with PITCH ENV, DRIVE with FILTER 1, FILTER 2, and the modulation: MOD ENV and LFO settings with every amount), at least one section from each parent, then every parameter nudged a little (6% of its range). Prefer parents of the same group.
 - **MORPH**: two kept sounds blended at a random point between 25% and 75%, by the morph rules of section 7.
-- **STYLE**: every parameter takes a value that some kept sound of the same type has for it (each parameter from a different sound).
+- **STYLE**: every parameter takes a value that some kept sound of the same group has for it (each parameter from a different sound).
 - **FREE**: every parameter anywhere in its safe range. The wildest.
-- **RECIPE / MAKE THIS KEY**: a sound of a named type. With 5 or more keepers of that type, the recipe is learned: each parameter drawn between the 10th and 90th percentile of the keepers of that type (correlated parameters such as tune and pitch-env amount drawn from the same keeper, then nudged). With fewer, a **starter recipe** written for the new engine (hand-tuned ranges for each type: a kick is a sine-ish table, low tune, a big fast pitch drop, short click; a closed hat is noise and high FM metal through the HP end of the filter, very short; and so on). ANY picks a type at random. A type button is never greyed out, since a starter recipe always exists.
+- **RECIPE / MAKE THIS KEY**: a sound of a named group. With 5 or more keepers of that group, the recipe is learned: each parameter drawn between the 10th and 90th percentile of the keepers of that group (correlated parameters such as tune and pitch-env amount drawn from the same keeper, then nudged). With fewer, a **starter recipe** written for the new engine (hand-tuned ranges for each group, each wide enough for several kinds of sound: LOW spans kicks, booms and low toms; TREBLE spans short and long noise and FM metal through the HP end of the filter, bells; and so on). ANY picks a group at random. A group button is never greyed out, since a starter recipe always exists.
 - **ALTER / ALTER KEY / ALTER ALL**: nudge each parameter around the sound's home by the HOW MUCH amount, within the parameter's safe range (WILD: its whole range). ALTER doesn't move OUTPUT (level, pan, send) and doesn't change a TABLE (it may move POSITION). It nudges the modulation amounts a sound has, and never adds a route it doesn't have (WILD may add one from the curated set).
 - **Safe ranges**: each parameter has a "percussion-safe" range in the schema, the range FREE and ALTER use. Start with sensible ranges by hand, then, once the library has 100 or more sounds, tighten them to what the keepers use (plus a margin).
 
@@ -428,8 +442,8 @@ Morphing between sounds is a core goal. Everything in section 4 exists so that a
 In the RANDOM menu, under INIT PATCH, with captions ("LOWEST KEY TO HIGHEST, STEP BY STEP"):
 
 - **MORPH KEYS**: keeps the lowest and highest keys' sounds (set them first; an end with no sound of its own gets a library sound), and fills every key between with a step of the way from one to the other, across every engine's zone (the whole keyboard).
-- **NEW ENDS**: a kick on the lowest key and a sound of another type (snare, clap, rim, perc, bell, hats, cymbal) on the highest, then MORPH KEYS. Press again for another pair. (Johnny: "kicks at the bottom and other stuff at the top".)
-- **KICK > HAT**: a kick, a snare, a mid perc and a closed hat on four evenly spread keys, each stretch between neighbours morphed.
+- **NEW ENDS**: a LOW sound on the lowest key and a sound of another group (MID, MID-HIGH or TREBLE) on the highest, then MORPH KEYS. Press again for another pair. (Johnny: "kicks at the bottom and other stuff at the top".)
+- **LOW > TREBLE** (was KICK > HAT): a LOW, a MID, a MID-HIGH and a TREBLE sound on four evenly spread keys, each stretch between neighbours morphed.
 - All three keep locked keys and closed padlocks, keep the sends, clamp pan to the pan rule, apply auto level, and are undoable.
 
 ### 7.2 The blend rules
@@ -453,7 +467,7 @@ In the RANDOM menu, under INIT PATCH, with captions ("LOWEST KEY TO HIGHEST, STE
 
 All new, with no ties to LXR-AFX's.
 
-- **Sound** (JSON): `{ v: 1, name, type, from, params: { id: number, ... }, mod: { 'lfo>cutoff': number, ... }, tables: { a: ref, a2?: ref, ab?: number, b: ref, ... } }`. Parameters by id (never by position), normalised floats. Unknown ids are ignored; missing ids take their default, so adding parameters later never breaks a sound. `mod` holds only non-zero amounts (normalised -1..+1); a missing amount is zero.
+- **Sound** (JSON): `{ v: 1, name, group: 'low' | 'mid' | 'midhigh' | 'treble', from, params: { id: number, ... }, mod: { 'lfo>cutoff': number, ... }, tables: { a: ref, a2?: ref, ab?: number, b: ref, ... } }`. Parameters by id (never by position), normalised floats. Unknown ids are ignored; missing ids take their default, so adding parameters later never breaks a sound. `mod` holds only non-zero amounts (normalised -1..+1); a missing amount is zero.
 - **Patch / preset** (JSON): `{ v: 1, name, engines, keys: [ by place in layout: { sound, edits, home, lock, out: { level, pan, send, trim } } ], fx: { reverb, dirt, comp, out }, bpm }`.
 - **Export files**: `{ app: 'metamorf', kind: 'presets' | 'library', version: 1, items: [...], tables: { hash: base64 } }`.
 - **localStorage**: the live state (`metamorf-v1`), presets (`metamorf-presets-v1`), colours (`metamorf-colours`). **IndexedDB**: user tables, the library, the bins.
@@ -492,8 +506,8 @@ Each step ends live on GitHub Pages, with its tests, small enough for Johnny to 
 9. **Auto level and the dud filter.**
 10. **RATE mode and the library**, with starter recipes for generating. Johnny starts rating here; his exports become `sounds/factory.json`.
 11. **Randomisers on the library**: LIBRARY, BREED, MORPH, STYLE, FREE, RECIPE, MAKE THIS KEY, ALTER, INIT PATCH, padlocks, the pan rule.
-12. **Morph keys**: MORPH KEYS, NEW ENDS, KICK > HAT, table pairs.
-13. **Phone screen** brought up to date.
+12. **Morph keys**: MORPH KEYS, NEW ENDS, LOW > TREBLE, table pairs.
+13. **Phone screen** brought up to date, with the phone RATE screen (6.2).
 14. **Polish**, then the live MORPH control (7.4).
 
 ---
@@ -509,8 +523,10 @@ Each step ends live on GitHub Pages, with its tests, small enough for Johnny to 
 
 ### Answers (2026-11-18)
 
-Johnny accepted every suggested answer: 1. no licence for now (all rights reserved); 2. four engines; 3. CC 18 → filter MORPH, CC 5 → reverb send; 4. one press per type with Q…P, [ and ], X bins, no star rating; 5. the whole keyboard plays the candidate in RATE; 6. one screen, scaled at 1280 x 700, and Johnny sees it before any pages are added.
+Johnny accepted every suggested answer: 1. no licence for now (all rights reserved); 2. four engines; 3. CC 18 → filter MORPH, CC 5 → reverb send; 4. one press per sound, no star rating (the keys are now 1 2 3 4 for the four groups, X bins); 5. the whole keyboard plays the candidate in RATE; 6. one screen, scaled at 1280 x 700, and Johnny sees it before any pages are added.
 
 **Modulation popup (2026-11-18, Johnny):** "right click a knob and a modulation popup appears, with lfo velocity envelope etc as sources with faders setting the amount for each". Folded into 2.1, 2.2, 4.2, 6.4, 7.2, 8 and 10: the 17 modulation amount knobs leave the grid, any continuous sound knob can be a destination, and the grid becomes four rows of 13 instead of five.
+
+**Groups (2026-11-18, Johnny):** "I don't want too many groups … something like low, mid, mid-high, treble"; "I might change those names at some point". Four groups by register replace the eleven types everywhere (6.1), stored by id so a rename never breaks a sound. The phone becomes the place for generating and rating hits (6.2).
 
 **FILTER 2 (2026-11-18, Johnny):** "The formant and comb filter can be under one heading, filter 2 … and there can be options in there. You can choose either." The choice is the continuous COMB > VOWEL knob, so sounds still morph; the two filters share PITCH, TRACK, RESONANCE and DAMP, plus VOWEL. FILTER becomes FILTER 1. 47 knobs.
