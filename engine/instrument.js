@@ -4,8 +4,8 @@
 // Each engine plays one note at a time: a new note fades the old one out over 3 ms while it starts. A note coming back
 // (RETURN: the zone going back to an earlier held key) starts on the next step of the BPM grid. The reverb send is
 // collected per engine already; the reverb itself and the compressor come in build step 8.
-import { Voice } from './voice.js?v=mwm45f0r';
-import { Dirt, DIRT_DEFAULTS } from '../sound/dirt.js?v=mwm45f0r';
+import { Voice } from './voice.js?v=mwm5a0zk';
+import { Dirt, DIRT_DEFAULTS } from '../sound/dirt.js?v=mwm5a0zk';
 
 export const MASTER_DEFAULTS = { level: 80 };
 export const TEMPO_DEFAULTS = { bpm: 120, ret: 2 };
