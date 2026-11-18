@@ -636,3 +636,23 @@ html.phone .pv { position: relative; display: grid; grid-template-columns: repea
 .menupanel .wtlist svg path { fill: none; stroke: var(--ink); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .wtsizes[hidden] { display: none; }
 .faders .vf.off { opacity: .42; }
+
+/* ---- the modulation popup (right-click a sound knob): on the grid, beside the knob's row, never over it ---- */
+.modpop { z-index: 6; position: relative; min-width: 0; min-height: 0; margin: 4px 2px; padding: 6px 12px 8px; display: flex; flex-direction: column; gap: 6px;
+  background: var(--panel); border: 2px solid var(--ink); border-radius: 3px; box-shadow: 6px 7px 0 rgb(var(--shade-rgb) / .35); overflow: hidden; }
+.modpop h3 { margin: 0; font-size: 16px; font-weight: 400; letter-spacing: .12em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: var(--rule); padding-bottom: 3px; }
+.modpop .mrows { display: flex; flex-direction: column; justify-content: space-evenly; gap: 6px; flex: 1; min-height: 0; }
+.mrow { display: grid; grid-template-columns: 6.2em 1fr 4.8em; align-items: center; gap: 10px; font-size: 16px; }
+.mrow .lab { letter-spacing: .06em; white-space: nowrap; cursor: default; }
+.mrow output { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mtrack { position: relative; display: flex; gap: 2px; height: 20px; cursor: ew-resize; touch-action: none; filter: drop-shadow(2px 2.2px 0 rgb(var(--ink-rgb) / .17)); }
+.mtrack b { flex: 1; background: var(--ghost); }
+.mtrack b.on { background: var(--ink); }
+.mtrack::after { content: ''; position: absolute; left: 50%; top: -3px; bottom: -3px; border-left: 2px solid var(--ink); margin-left: -1px; pointer-events: none; }
+.mfoot { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.mfoot .btn { min-height: 26px; font-size: 15px; padding: 1px 10px; }
+@media (max-height: 820px) { .modpop { gap: 3px; padding: 4px 10px 5px; } .modpop .mrows { gap: 3px; } .mtrack { height: 16px; } .mrow { font-size: 15px; } }
+/* the modulation marks on a knob: an arc outside the ring for its reach, a dot under it per source (MOD ENV, LFO, VELOCITY) */
+.knob .marc { fill: none; stroke: var(--ink); stroke-width: 2.4; stroke-linecap: butt; }
+.knob .md { fill: var(--ink); display: none; }
+.knob .md.on { display: inline; }

@@ -61,8 +61,14 @@ export const KNOB_SVG = (() => {
     const a = KNOB_A0 + i / (KNOB_N - 1) * KNOB_SWEEP, c = Math.cos(a), s = Math.sin(a);
     t += `<line class="tk" x1="${(32 + 20 * c).toFixed(2)}" y1="${(32 + 20 * s).toFixed(2)}" x2="${(32 + 28 * c).toFixed(2)}" y2="${(32 + 28 * s).toFixed(2)}"/>`;
   }
-  return `<svg viewBox="0 0 64 64" aria-hidden="true">${t}<line class="ptr" x1="32" y1="32" x2="46" y2="32"/><line class="notch" x1="61" y1="32" x2="64" y2="32"/></svg>`;
+  // (the modulation marks: an arc outside the ring for how far it reaches, a dot per source under the ring)
+  const dots = [26, 32, 38].map((x, i) => `<rect class="md" data-s="${i}" x="${x - 2}" y="54" width="4" height="4"/>`).join('');
+  return `<svg viewBox="0 0 64 64" aria-hidden="true">${t}<path class="marc" d=""/>${dots}<line class="ptr" x1="32" y1="32" x2="46" y2="32"/><line class="notch" x1="61" y1="32" x2="64" y2="32"/></svg>`;
 })();
+const MARC_R = 31.5;
+const arcPt = (f) => { const a = KNOB_A0 + clamp(f, 0, 1) * KNOB_SWEEP; return `${(32 + MARC_R * Math.cos(a)).toFixed(2)} ${(32 + MARC_R * Math.sin(a)).toFixed(2)}`; };
+/** the arc outside the ring from f0 to f1 (0..1 of the sweep) */
+export const arcPath = (f0, f1) => { f0 = clamp(f0, 0, 1); f1 = clamp(f1, 0, 1); if (f1 - f0 < 0.004) return ''; return `M ${arcPt(f0)} A ${MARC_R} ${MARC_R} 0 ${(f1 - f0) * KNOB_SWEEP > Math.PI ? 1 : 0} 1 ${arcPt(f1)}`; };
 export const knobF = (v, min, max) => (max > min ? (v - min) / (max - min) : 0);
 export const knobDeg = (f) => (KNOB_A0 + clamp(f, 0, 1) * KNOB_SWEEP) * 180 / Math.PI;
 export function lightRing(ticks, f, cf) {
@@ -74,13 +80,14 @@ export function lightRing(ticks, f, cf) {
 export const LOCK_SVG = '<svg viewBox="0 0 16 18" aria-hidden="true"><path d="M4 8V5a4 4 0 0 1 8 0v3"/><rect x="1.5" y="8" width="13" height="9" rx="1"/></svg>';
 const LR_SVG = '<text class="lr" x="3" y="66">L</text><text class="lr" x="61" y="66">R</text>';
 // o: { label, min, max, centre, step, get(), set(v), show(v), reset() (double-click), was() (the notch: undefined for
-//   none), lock: { get(), toggle() } or none, lr, learn (the target LEARN maps), lit() (the label lit: a hand edit) }
+//   none), lock: { get(), toggle() } or none, lr, learn (the target LEARN maps), lit() (the label lit: a hand edit),
+//   mod() (its modulation: null for none, or { lo, hi: how far it reaches, in the knob's units; on: [a bool per source] }) }
 export function knob(o) {
   const el = document.createElement('div'); el.className = 'vf';
   el.innerHTML = `<output></output><div class="knob" role="slider">${KNOB_SVG}</div><span class="lab"></span>${o.lock ? `<button class="lock" type="button" tabindex="-1" aria-label="Lock ${o.label}">${LOCK_SVG}</button>` : ''}`;
   el.querySelector('.lab').textContent = o.label;
   const tr = el.querySelector('.knob'), out = el.querySelector('output'), lock = el.querySelector('.lock');
-  const ticks = tr.querySelectorAll('.tk'), ptr = tr.querySelector('.ptr'), notch = tr.querySelector('.notch');
+  const ticks = tr.querySelectorAll('.tk'), ptr = tr.querySelector('.ptr'), notch = tr.querySelector('.notch'), marc = tr.querySelector('.marc'), mds = tr.querySelectorAll('.md');
   tr.setAttribute('aria-label', o.label); tr.setAttribute('aria-valuemin', o.min); tr.setAttribute('aria-valuemax', o.max);
   if (o.lr) tr.querySelector('svg').insertAdjacentHTML('beforeend', LR_SVG);
   const cf = o.centre === undefined ? undefined : knobF(o.centre, o.min, o.max);
@@ -93,6 +100,9 @@ export function knob(o) {
     tr.classList.toggle('morphed', w !== undefined && w !== v);
     if (w !== undefined) notch.setAttribute('transform', `rotate(${knobDeg(knobF(w, o.min, o.max))} 32 32)`);
     el.classList.toggle('keyed', !!(o.lit && o.lit()));
+    const m = o.mod ? o.mod() : null;
+    marc.setAttribute('d', m ? arcPath(knobF(m.lo, o.min, o.max), knobF(m.hi, o.min, o.max)) : '');
+    mds.forEach((d, i) => d.classList.toggle('on', !!(m && m.on[i])));
     if (lock) { const l = o.lock.get(); lock.setAttribute('aria-pressed', l); lock.title = l ? `${o.label.toUpperCase()} is locked: the randomisers leave it as it is. Click to unlock` : `Lock ${o.label.toUpperCase()}: the randomisers then leave it as it is`; }
   };
   const put = (x) => {
