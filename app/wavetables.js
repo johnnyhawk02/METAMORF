@@ -1,10 +1,10 @@
 // The page's wavetables: the built-in list, the user's own (kept in IndexedDB, app/store.js), and getting the tables
 // the sounds name to the audio thread. A table is built in the Worker beside the page (app/offline.js), never on the
 // page's thread or the audio thread, and sent on once; until it arrives a note plays BASIC.
-import { BUILTINS, BUILTIN_IDS, DEFAULT_TABLE } from '../engine/tables.js?v=mwm8ivhg';
-import { builtTable, userTable } from './offline.js?v=mwm8ivhg';
-import { allTables, putTable, deleteTable } from './store.js?v=mwm8ivhg';
-import { FRAME, framesFrom, hashFrames } from './wav.js?v=mwm8ivhg';
+import { BUILTINS, BUILTIN_IDS, DEFAULT_TABLE } from '../engine/tables.js?v=mwm8nfdt';
+import { builtTable, userTable } from './offline.js?v=mwm8nfdt';
+import { allTables, putTable, deleteTable } from './store.js?v=mwm8nfdt';
+import { FRAME, framesFrom, hashFrames } from './wav.js?v=mwm8nfdt';
 
 export { DEFAULT_TABLE, BUILTIN_IDS };
 const NAMES = new Map(BUILTINS.map((b) => [b[0], b[1]]));

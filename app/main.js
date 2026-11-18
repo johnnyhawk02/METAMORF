@@ -2,17 +2,17 @@
 // knobs edit the key played last. The sound engine is in engine/ and sound/ (no UI there); the controls, colours and
 // phone view are in this folder.
 import { PARAMS, BY_ID, SECTIONS, BASE, OUT_DEFAULT, TYPES, KEYS, MAX_ENGINES, DEFAULT_ENGINES, DEFAULT_LOW, isBip, showValue, fullParams, clampN,
-  levelText, panText, sendText, panRange, engineOf, zoneOf, validRoute } from '../sound/params.js?v=mwm8ivhg';
-import { free, recipe, alter, pickTables, pickRoutes, alterRoutes, RECIPE_TYPES } from '../sound/makers.js?v=mwm8ivhg';
-import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm8ivhg';
-import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm8ivhg';
-import { presetName } from './names.js?v=mwm8ivhg';
-import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm8ivhg';
-import { setupColours } from './colours.js?v=mwm8ivhg';
-import { setupPhone } from './phone.js?v=mwm8ivhg';
-import { render as renderOffline } from './offline.js?v=mwm8ivhg';
-import * as WT from './wavetables.js?v=mwm8ivhg';
-import { decodeWav, autoSize, SIZES } from './wav.js?v=mwm8ivhg';
+  levelText, panText, sendText, panRange, engineOf, zoneOf, validRoute } from '../sound/params.js?v=mwm8nfdt';
+import { free, recipe, alter, pickTables, pickRoutes, alterRoutes, RECIPE_TYPES } from '../sound/makers.js?v=mwm8nfdt';
+import { FX_DEFAULTS, RETURN_BEATS } from '../engine/instrument.js?v=mwm8nfdt';
+import { DIRT_DEFAULTS, dirtHz, scHz, decayMs, volDb, pregainDb, bassDb } from '../sound/dirt.js?v=mwm8nfdt';
+import { presetName } from './names.js?v=mwm8nfdt';
+import { $, clamp, hbar, knob, makeDice, DIE_SVG } from './controls.js?v=mwm8nfdt';
+import { setupColours } from './colours.js?v=mwm8nfdt';
+import { setupPhone } from './phone.js?v=mwm8nfdt';
+import { render as renderOffline } from './offline.js?v=mwm8nfdt';
+import * as WT from './wavetables.js?v=mwm8nfdt';
+import { decodeWav, autoSize, SIZES } from './wav.js?v=mwm8nfdt';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2); // C3 = 60
@@ -28,7 +28,7 @@ const TYPE_IDS = TYPES.map((t) => t[0]);
 // send, trim: part of the mix, not of the sound), and its oscillators' tables (t: a and b, by id)
 const baseTables = () => ({ a: WT.DEFAULT_TABLE, b: WT.DEFAULT_TABLE });
 const blankKey = () => ({ p: { ...BASE }, t: baseTables(), m: {}, name: '', type: '', from: 'base', o: {}, home: null, lock: false, out: { ...OUT_DEFAULT } });
-// its modulation routes (m: { 'env>cutoff': amount, ... }, only the routes that make sense, amounts -1..1, none at 0)
+// its modulation amounts (m: { 'env>cutoff': amount, ... }, amounts -1..1, none at 0)
 const tidyM = (m) => { const o = {}; if (m && typeof m === 'object') for (const key in m) { const v = Number(m[key]); if (validRoute(key) && Number.isFinite(v) && v) o[key] = clamp(v, -1, 1); } return o; };
 const tidyT = (t) => ({ a: WT.validId(t?.a) ? t.a : WT.DEFAULT_TABLE, b: WT.validId(t?.b) ? t.b : WT.DEFAULT_TABLE });
 const S = {
@@ -103,7 +103,7 @@ const send = (m) => { if (node) node.port.postMessage(m); };
 async function startAudio() {
   if (ctx) { if (ctx.state !== 'running') await ctx.resume(); return; }
   ctx = new AudioContext({ latencyHint: 'interactive' });
-  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm8ivhg', import.meta.url));
+  await ctx.audioWorklet.addModule(new URL('../sound/worklet.js?v=mwm8nfdt', import.meta.url));
   node = new AudioWorkletNode(ctx, 'metamorf', { numberOfInputs: 0, outputChannelCount: [2] });
   WT.attach((m) => send(m), () => drawKnobs());
   node.port.onmessage = (e) => { if (e.data.type === 'peaks') { heard = Math.max(heard, ...e.data.peaks); showPeaks(e.data.peaks); showSc(e.data.sc || 0); } };
@@ -327,7 +327,7 @@ $('fx-tab').addEventListener('click', () => { S.view = S.view === 'fx' ? 'synth'
 // ---------------------------------------------------------------------------------------------------------------
 const GRID_COLS = 13, GRID_ROWS = 4;
 // (as docs/SPEC.md lays out the whole voice: MOD ENV and LFO join in build steps 6 and 7)
-const ROWS = [['osc a', 'osc b', 'fm'], ['noise', 'click', 'pitch env', 'drive'], ['amp', 'mod env', 'filter 1'], ['filter 2', 'lfo', 'output']];
+const ROWS = [['osc a', 'osc b', 'fm'], ['noise', 'click', 'pitch env', 'drive'], ['amp', 'filter 1', 'mod env'], ['filter 2', 'lfo', 'output']];
 // a part at zero is greyed (its knobs still turn); FM is off when both its amounts are
 const PART_GATE = { 'osc a': ['a_level'], 'osc b': ['b_level'], fm: ['fm_ab', 'fm_ba'], noise: ['n_level'], click: ['c_level'], 'pitch env': ['p_amt'], drive: ['drive'], 'filter 2': ['f2_mix'] };
 // a knob drawn dim while another is at zero: VOWEL while FILTER 2 is all comb

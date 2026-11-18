@@ -94,19 +94,22 @@ export const PARAMS = [
   { id: 'lfo_rate', label: 'rate', sec: 'lfo', map: 'log', lo: 0.05, hi: 2000, def: Math.log(100) / Math.log(40000), safe: [0.35, 0.8], show: (f) => (f < 10 ? f.toFixed(f < 1 ? 2 : 1) + 'Hz' : hzText(f)) },
   { id: 'lfo_shape', label: 'shape', sec: 'lfo', map: 'lin', lo: 0, hi: 1, def: 0, safe: [0, 1], show: (x) => between(['SINE', 'TRI', 'SAW', 'SQR', 'RAND'], x) },
 ];
-// ---- modulation: three sources, each to the destinations where it makes sense (the routes a sound may hold) ----
+// ---- modulation: three sources; the curated routes (what the randomisers reach for) ----
 export const MOD_SOURCES = ['env', 'lfo', 'vel'];
 export const MOD_NAMES = { env: 'MOD ENV', lfo: 'LFO', vel: 'VELOCITY' };
 export const MOD_ROUTES = {
   env: ['fm_ab', 'fm_ba', 'a_pos', 'b_pos', 'cutoff', 'f2_pitch'],
   lfo: ['a_tune', 'a_pos', 'b_pos', 'cutoff', 'fm_ab', 'fm_ba', 'a_level'],
-  vel: ['decay', 'p_amt', 'cutoff', 'fm_ab', 'fm_ba', 'c_level', 'n_seed'],
+  vel: ['decay', 'p_amt', 'cutoff', 'fm_ab', 'fm_ba', 'c_level'],
 };
 // how far amount 1 moves a destination, in its normalised units (1 unless a full sweep would be too much)
 const DEPTHS = { a_tune: [1, 0.5, 0.5], cutoff: [0.8, 0.4, 0.4], f2_pitch: [0.46, 0.23, 0.23] };
 export const modDepth = (s, id) => (DEPTHS[id] ? DEPTHS[id][typeof s === 'number' ? s : MOD_SOURCES.indexOf(s)] : 1);
 export const routeKey = (s, id) => s + '>' + id;
-export const validRoute = (key) => { const [s, id] = String(key).split('>'); return !!MOD_ROUTES[s] && MOD_ROUTES[s].includes(id); };
+/** a source can reach any sound parameter but NOISE SEED (read at note start: only VELOCITY moves it); the curated
+ * routes above are the ones the randomisers use */
+export const modulatable = (s, id) => MOD_SOURCES.includes(s) && !!BY_ID[id] && (id !== 'n_seed' || s === 'vel');
+export const validRoute = (key) => { const [s, id] = String(key).split('>'); return modulatable(s, id); };
 export const BY_ID = Object.fromEntries(PARAMS.map((p) => [p.id, p]));
 export const SECTIONS = [...new Set(PARAMS.map((p) => p.sec))];
 export const isBip = (p) => p.map === 'bip';
